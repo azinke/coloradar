@@ -1,0 +1,76 @@
+{
+  "version": "0.01",
+  "description": {
+    "ccradar": "Cascade Chips Radar",
+    "scradar": "Single Chip Radar"
+  },
+  "calibration": {
+    "ccradar": {
+      "antenna": "calib/cascade/antenna_cfg.txt",
+      "couling": "calib/cascade/coupling_calib.txt",
+      "heatmap": "calib/cascade/heatmap_cfg.txt",
+      "phase": "calib/cascade/phase_frequency_calib.txt",
+      "waveform": "calib/cascade/waveform_cfg.txt"
+    },
+    "scradar": {
+      "antenna": "calib/single_chip/antenna_cfg.txt",
+      "couling": "calib/single_chip/coupling_calib.txt",
+      "heatmap": "calib/single_chip/heatmap_cfg.txt",
+      "waveform": "calib/single_chip/waveform_cfg.txt"
+    },
+    "transform": {
+      "base-to-ccradar": "calib/transforms/base_to_cascade.txt",
+      "base-to-scradar": "calib/transforms/base_to_single_chip.txt",
+      "base-to-imu": "calib/transforms/base_to_imu.txt",
+      "base-to-lidar": "calib/transforms/base_to_lidar.txt",
+      "base-to-vicon": "calib/transforms/base_to_vicon.txt"
+    }
+  },
+  "datastore": {
+    "folders": [
+      "12_21_2020_ec_hallways_run0"
+    ],
+    "paths": {
+      "ccradar": {
+        "raw": {
+          "timestamp": "cascade/adc_samples/timestamps.txt",
+          "data": "cascade/adc_samples/data"
+        },
+        "heatmap": {
+          "timestamp": "cascade/heatmaps/timestamps.txt",
+          "data": "cascade/heatmaps/data"
+        },
+        "pointcloud": {
+          "timestamp": "",
+          "data": ""
+        }
+      },
+      "scradar": {
+        "raw": {
+          "timestamp": "single_chip/adc_samples/timestamps.txt",
+          "data": "single_chip/adc_samples/data"
+        },
+        "heatmap": {
+          "timestamp": "single_chip/heatmaps/timestamps.txt",
+          "data": "single_chip/heatmaps/data"
+        },
+        "pointcloud": {
+          "timestamp": "single_chip/pointclouds/timestamps.txt",
+          "data": "single_chip/pointclouds/data"
+        }
+      },
+      "lidar": {
+        "timestamp": "lidar/timestamps.txt",
+        "data": "lidar/pointclouds/data"
+      },
+      "imu": {
+        "timestamp": "imu/timestamps.txt",
+        "data": "imu/imu_data.txt"
+      },
+      "groundtruth": {
+        "timestamp": "groundtruth/timestamps.txt",
+        "data": "groundtruth/groundtruth_poses.txt"
+      }
+    }
+  }
+}

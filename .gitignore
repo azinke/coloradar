@@ -1,0 +1,9 @@
+# cache files
+*cache*
+
+# Virtual environment
+venv
+
+# Dataset folder expect the dataset entry point
+dataset/*
+!dataset/*.json
