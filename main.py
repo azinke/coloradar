@@ -1,0 +1,13 @@
+"""Entrypoint of the package."""
+import json
+
+from src.config import DATASET
+from src.core.calibration import Calibration
+
+if __name__ == "__main__":
+  config: dict = {}
+
+  with open(DATASET, "r") as fh:
+    config = json.load(fh)
+
+  calib = Calibration(config["calibration"])

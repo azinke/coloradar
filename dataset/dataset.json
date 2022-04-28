@@ -7,14 +7,14 @@
   "calibration": {
     "ccradar": {
       "antenna": "calib/cascade/antenna_cfg.txt",
-      "couling": "calib/cascade/coupling_calib.txt",
+      "coupling": "calib/cascade/coupling_calib.txt",
       "heatmap": "calib/cascade/heatmap_cfg.txt",
       "phase": "calib/cascade/phase_frequency_calib.txt",
       "waveform": "calib/cascade/waveform_cfg.txt"
     },
     "scradar": {
       "antenna": "calib/single_chip/antenna_cfg.txt",
-      "couling": "calib/single_chip/coupling_calib.txt",
+      "coupling": "calib/single_chip/coupling_calib.txt",
       "heatmap": "calib/single_chip/heatmap_cfg.txt",
       "waveform": "calib/single_chip/waveform_cfg.txt"
     },
