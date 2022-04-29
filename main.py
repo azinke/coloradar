@@ -1,8 +1,8 @@
 """Entrypoint of the package."""
 import json
 
-from src.config import DATASET
-from src.core.calibration import Calibration
+from core.config import DATASET
+from core.calibration import Calibration
 
 if __name__ == "__main__":
   config: dict = {}
