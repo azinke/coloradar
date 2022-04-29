@@ -2,6 +2,8 @@
 import sys
 import argparse
 
+import matplotlib.pyplot as plt
+
 from core.dataset import Coloradar
 from core.utils.common import info, success
 
@@ -43,6 +45,34 @@ def main () -> None:
         action="store_true"
     )
     parser.add_argument(
+        "--bird-eye-view",
+        "-b",
+        help="Request a bird eye view rendering",
+        action="store_true",
+        default=False
+    )
+    parser.add_argument(
+        "--resolution",
+        "-r",
+        help="Bird eye view resolution",
+        type=float,
+        default=0.05,
+    )
+    parser.add_argument(
+        "--width",
+        "-w",
+        help="Bird eye view image width",
+        type=float,
+        default=80.0,
+    )
+    parser.add_argument(
+        "--height",
+        "-h",
+        help="Bird eye view image height",
+        type=float,
+        default=80.0,
+    )
+    parser.add_argument(
         "--groundtruth",
         help="Render the bounding box wrapping the groundtruth objects "
             "a given dataset entry",
@@ -63,6 +93,18 @@ def main () -> None:
         record = coloradar.getRecord(args.dataset, args.index)
 
         if args.lidar:
+            if args.bird_eye_view:
+                info("Rendering lidar pointcloud bird eye view ...")
+                bev = record.lidar.getBirdEyeView(
+                    args.resolution,
+                    (-args.width/2, args.width/2),
+                    (-args.height/2, args.height/2),
+                )
+                success("Bird Eye View successfully rendred!")
+                plt.imshow(bev)
+                plt.show()
+                info("Bird Eye View closed!")
+                sys.exit(0)
             info("Rendering lidar pointcloud ...")
             record.lidar.show()
             success("Successfully closed!")
