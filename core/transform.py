@@ -7,7 +7,7 @@ a sensor-specific coordinate system.
 import os
 import numpy as np
 
-from src.config import ROOTDIR
+from core.config import ROOTDIR
 from .utils.quaternion import q2r, q2er
 
 

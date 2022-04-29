@@ -2,8 +2,8 @@
 from logging import root
 import os
 import json
-from src.config import ROOTDIR
-from src.core.transform import (
+from core.config import ROOTDIR
+from core.transform import (
     BaseToCCRadar,
     BaseToSCRadar,
     BaseToLidar,
