@@ -28,17 +28,22 @@
   },
   "datastore": {
     "folders": [
-      "12_21_2020_ec_hallways_run0"
+      {
+        "codename": "hall0",
+        "path": "12_21_2020_ec_hallways_run0"
+      }
     ],
     "paths": {
       "ccradar": {
         "raw": {
           "timestamp": "cascade/adc_samples/timestamps.txt",
-          "data": "cascade/adc_samples/data"
+          "data": "cascade/adc_samples/data",
+          "filename_prefix": "frame_"
         },
         "heatmap": {
           "timestamp": "cascade/heatmaps/timestamps.txt",
-          "data": "cascade/heatmaps/data"
+          "data": "cascade/heatmaps/data",
+          "filename_prefix": "heatmap_"
         },
         "pointcloud": {
           "timestamp": "",
@@ -48,20 +53,24 @@
       "scradar": {
         "raw": {
           "timestamp": "single_chip/adc_samples/timestamps.txt",
-          "data": "single_chip/adc_samples/data"
+          "data": "single_chip/adc_samples/data",
+          "filename_prefix": "frame_"
         },
         "heatmap": {
           "timestamp": "single_chip/heatmaps/timestamps.txt",
-          "data": "single_chip/heatmaps/data"
+          "data": "single_chip/heatmaps/data",
+          "filename_prefix": "heatmap_"
         },
         "pointcloud": {
           "timestamp": "single_chip/pointclouds/timestamps.txt",
-          "data": "single_chip/pointclouds/data"
+          "data": "single_chip/pointclouds/data",
+          "filename_prefix": "radar_pointcloud_"
         }
       },
       "lidar": {
         "timestamp": "lidar/timestamps.txt",
-        "data": "lidar/pointclouds/data"
+        "data": "lidar/pointclouds",
+        "filename_prefix": "lidar_pointcloud_"
       },
       "imu": {
         "timestamp": "imu/timestamps.txt",
