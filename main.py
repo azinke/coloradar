@@ -41,12 +41,28 @@ def main () -> None:
     )
     parser.add_argument(
         "--lidar",
-        help="Render the lidar pointcloud of a given dataset entry",
+        help="Render the lidar pointcloud",
         action="store_true"
     )
     parser.add_argument(
+        "--scradar",
+        help="Render the single chip radar pointcloud",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--heatmap",
+        help="Render heatmap (only for scradar and ccradar)",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--threshold",
+        help="Threshold for filtering heatmap pointcloud",
+        type=float,
+        default=0.15,
+    )
+    parser.add_argument(
         "--bird-eye-view",
-        "-b",
+        "-bev",
         help="Request a bird eye view rendering",
         action="store_true",
         default=False
@@ -60,14 +76,12 @@ def main () -> None:
     )
     parser.add_argument(
         "--width",
-        "-w",
         help="Bird eye view image width",
         type=float,
         default=80.0,
     )
     parser.add_argument(
         "--height",
-        "-h",
         help="Bird eye view image height",
         type=float,
         default=80.0,
@@ -107,6 +121,33 @@ def main () -> None:
                 sys.exit(0)
             info("Rendering lidar pointcloud ...")
             record.lidar.show()
+            success("Successfully closed!")
+            sys.exit(0)
+        elif args.scradar:
+            if args.heatmap:
+                if args.bird_eye_view:
+                    info("Rendering single chip radar heatmap bird eye view ...")
+                    record.scradar.showHeatmapBirdEyeView(args.threshold)
+                    success("Heatmap bird eye view closed!")
+                    sys.exit(0)
+                info("Rendering single chip radar heatmap ...")
+                record.scradar.showHeatmap(args.threshold)
+                success("Heatmap closed!")
+                sys.exit(0)
+            elif args.bird_eye_view:
+                info("Rendering single chip radar pointcloud bird eye view ...")
+                bev = record.scradar.getBirdEyeView(
+                    args.resolution,
+                    (-args.width/2, args.width/2),
+                    (0, args.height/2),
+                )
+                success("Bird Eye View successfully rendred!")
+                plt.imshow(bev)
+                plt.show()
+                info("Bird Eye View closed!")
+                sys.exit(0)
+            info("Rendering lidar pointcloud ...")
+            record.scradar.show()
             success("Successfully closed!")
             sys.exit(0)
 

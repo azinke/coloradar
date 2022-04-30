@@ -32,7 +32,8 @@ class Coloradar:
 
     def getRecord(self, codename: str, index: int) -> Record:
         """Read a sensor recording frame from the dataset."""
-        return Record(self.config["datastore"], codename, index)
+        return Record(
+            self.config["datastore"], self.calibration, codename, index)
 
     def printCodenames(self) -> None:
         """Print the available sub-dataset and their codename."""
