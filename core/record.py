@@ -8,7 +8,7 @@ import os
 
 from core.config import ROOTDIR, DATASET
 from core.lidar import Lidar
-from core.radar import SCRadar
+from core.radar import SCRadar, CCRadar
 
 from .utils.common import error
 
@@ -43,3 +43,4 @@ class Record:
         descriptor["paths"]["rootdir"] = os.path.join(ROOTDIR, subdir)
         self.lidar = Lidar(descriptor, self.calibration, index)
         self.scradar = SCRadar(descriptor, self.calibration, index)
+        self.ccradar = CCRadar(descriptor, self.calibration, index)

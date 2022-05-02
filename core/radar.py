@@ -17,7 +17,7 @@ class SCRadar(Lidar):
 
     Attrinutes:
         NUMBER_RECORDING_ATTRIBUTES: Number of 32-bit integer packed
-        to form a single recording measurement
+        to form a single measurement recording
     """
 
     # The recorded attributes are:
@@ -30,29 +30,30 @@ class SCRadar(Lidar):
 
         Arguments:
             config (dict): Paths to access the dataset
-            calib: Calibration object (See calibration.py)
+            calib (Calibration): Calibration object (See calibration.py)
             index (int): Index of the lidar record to load
         """
         sensor: str = self.__class__.__name__.lower()
         self.calibration: SCRadarCalibration = getattr(calib, sensor)
 
-        # Read pointcloud
-        filename: str = self._filename(
-            config["paths"][sensor]["pointcloud"]["filename_prefix"],
-            index,
-            "bin"
-        )
-        self.filepath = os.path.join(
-            config["paths"]["rootdir"],
-            config["paths"][sensor]["pointcloud"]["data"],
-            filename
-        )
-        try:
-            cld = np.fromfile(self.filepath, np.float32)
-            self.cld = np.reshape(cld, (-1, self.NUMBER_RECORDING_ATTRIBUTES))
-        except FileNotFoundError:
-            error(f"File '{self.filepath}' not found.")
-            sys.exit(1)
+        if sensor == "scradar":
+            # Read pointcloud
+            filename: str = self._filename(
+                config["paths"][sensor]["pointcloud"]["filename_prefix"],
+                index,
+                "bin"
+            )
+            self.filepath = os.path.join(
+                config["paths"]["rootdir"],
+                config["paths"][sensor]["pointcloud"]["data"],
+                filename
+            )
+            try:
+                cld = np.fromfile(self.filepath, np.float32)
+                self.cld = np.reshape(cld, (-1, self.NUMBER_RECORDING_ATTRIBUTES))
+            except FileNotFoundError:
+                error(f"File '{self.filepath}' not found.")
+                sys.exit(1)
 
         # Read heatmap
         filename = self._filename(
@@ -163,8 +164,8 @@ class SCRadar(Lidar):
             az_idx: int, el_idx: int) -> np.array:
         """Convert polar coordinate to catesian coordinate."""
         _range_bin_width: float = self.calibration.heatmap.range_bin_width
-        _el_bin = self.calibration.heatmap.elevation_bins[el_idx]
-        _az_bin = self.calibration.heatmap.azimuth_bins[az_idx]
+        _el_bin: float = self.calibration.heatmap.elevation_bins[el_idx]
+        _az_bin: float = self.calibration.heatmap.azimuth_bins[az_idx]
 
         point = np.zeros(3)
         point[0] = r_idx * _range_bin_width * np.cos(_el_bin) * np.cos(_az_bin)
@@ -175,7 +176,9 @@ class SCRadar(Lidar):
     def _heatmap_to_pointcloud(self, threshold: float = 0.15) -> np.array:
         """Compute pointcloud from heatmap.
 
-        calculates point locations in the sensor frame for plotting heatmaps
+        The recordings of the heatmap are stored in the polar form.
+        This function prepares a pointcloud in the cartesian coordinate
+        system based the heatmap
 
         Argument:
             threshold (float): Threshold to filter the pointcloud
@@ -206,3 +209,9 @@ class SCRadar(Lidar):
             pcl[:, 3] -= np.min(pcl[:, 3])
             pcl[:, 3] /= np.max(pcl[:, 3])
         return pcl
+
+
+class CCRadar(SCRadar):
+    """Cascade Chip Radar."""
+
+    pass

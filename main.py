@@ -50,6 +50,11 @@ def main () -> None:
         action="store_true"
     )
     parser.add_argument(
+        "--ccradar",
+        help="Render the cascade chip radar pointcloud",
+        action="store_true"
+    )
+    parser.add_argument(
         "--heatmap",
         help="Render heatmap (only for scradar and ccradar)",
         action="store_true"
@@ -135,7 +140,7 @@ def main () -> None:
                 success("Heatmap closed!")
                 sys.exit(0)
             elif args.bird_eye_view:
-                info("Rendering single chip radar pointcloud bird eye view ...")
+                info("Rendering single chip radar heatmap bird eye view ...")
                 bev = record.scradar.getBirdEyeView(
                     args.resolution,
                     (-args.width/2, args.width/2),
@@ -150,6 +155,29 @@ def main () -> None:
             record.scradar.show()
             success("Successfully closed!")
             sys.exit(0)
+        elif args.ccradar:
+            if args.heatmap:
+                if args.bird_eye_view:
+                    info("Rendering cascade chip radar heatmap bird eye view ...")
+                    record.ccradar.showHeatmapBirdEyeView(args.threshold)
+                    success("Heatmap bird eye view closed!")
+                    sys.exit(0)
+                info("Rendering cascade chip radar heatmap ...")
+                record.ccradar.showHeatmap(args.threshold)
+                success("Heatmap closed!")
+                sys.exit(0)
+            elif args.bird_eye_view:
+                info("Rendering cascade chip radar heatmap bird eye view ...")
+                bev = record.ccradar.getBirdEyeView(
+                    args.resolution,
+                    (-args.width/2, args.width/2),
+                    (0, args.height/2),
+                )
+                success("Bird Eye View successfully rendred!")
+                plt.imshow(bev)
+                plt.show()
+                info("Bird Eye View closed!")
+                sys.exit(0)
 
     parser.print_help()
     sys.exit(0)

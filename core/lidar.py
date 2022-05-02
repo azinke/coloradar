@@ -26,7 +26,7 @@ class Lidar(object):
 
         Argument:
             config (dict): Paths to access the dataset
-            calib: Calibration object (See calibration.py)
+            calib (Calibration): Calibration object (See calibration.py)
             index (int): Index of the lidar record to load
         """
         self.calibration = calib
