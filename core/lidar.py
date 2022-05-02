@@ -17,17 +17,19 @@ class Lidar(object):
         cld: Lidar pointcloud
     """
 
-    def __init__(self, config: dict[str, str], index: int) -> None:
+    # The recorded attributes are:
+    # x, y, z, I (Intensity of the reflections)
+    NUMBER_RECORDING_ATTRIBUTES: int = 4
+
+    def __init__(self, config: dict[str, str], calib, index: int) -> None:
         """Init.
 
         Argument:
-            filepath (str): Path to the lidar recording
+            config (dict): Paths to access the dataset
+            calib (Calibration): Calibration object (See calibration.py)
             index (int): Index of the lidar record to load
         """
-        # The recorded attributes are:
-        # x, y, z, I (Intensity of the reflections)
-        NUMBER_LIDAR_RECORDING_ATTRIBUTES: int = 4
-
+        self.calibration = calib
         filename: str = self._filename(
             config["paths"]["lidar"]["filename_prefix"],
             index,
@@ -40,7 +42,7 @@ class Lidar(object):
         )
         try:
             cld = np.fromfile(self.filepath, np.float32)
-            self.cld = np.reshape(cld, (-1, NUMBER_LIDAR_RECORDING_ATTRIBUTES))
+            self.cld = np.reshape(cld, (-1, self.NUMBER_RECORDING_ATTRIBUTES))
         except FileNotFoundError:
             error(f"File '{self.filepath}' not found.")
             sys.exit(1)
