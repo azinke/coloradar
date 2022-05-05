@@ -90,9 +90,9 @@ class SCRadar(Lidar):
         """
         ax = plt.axes(projection="3d")
         ax.set_title("Heatmap")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_zlabel("z")
+        ax.set_xlabel("Azimuth")
+        ax.set_ylabel("Range")
+        ax.set_zlabel("Elevation")
         pcl = self._heatmap_to_pointcloud(threshold)
         plot = ax.scatter(
             pcl[:, 0],
@@ -111,6 +111,8 @@ class SCRadar(Lidar):
 
         Argument:
             threshold (float): Threshold to filter the pointcloud
+
+        TODO: To be fixed. Not working
         """
         pointcloud = self._heatmap_to_pointcloud(threshold)
         x = pointcloud[:, 0]
@@ -162,7 +164,11 @@ class SCRadar(Lidar):
 
     def _polar_to_cartesian(self, r_idx: int,
             az_idx: int, el_idx: int) -> np.array:
-        """Convert polar coordinate to catesian coordinate."""
+        """Convert polar coordinate to catesian coordinate.
+
+        Example:
+            self._polar_to_cartesian(range_idx - 1, az_idx - 1, el_idx - 1)
+        """
         _range_bin_width: float = self.calibration.heatmap.range_bin_width
         _el_bin: float = self.calibration.heatmap.elevation_bins[el_idx]
         _az_bin: float = self.calibration.heatmap.azimuth_bins[az_idx]
@@ -189,15 +195,27 @@ class SCRadar(Lidar):
         _num_el_bin: int = self.calibration.heatmap.num_elevation_bins
         _num_az_bin: int = self.calibration.heatmap.num_azimuth_bins
         _num_r_num: int = self.calibration.heatmap.num_range_bins
+
+        _range_bin_width: float = self.calibration.heatmap.range_bin_width
+
         # transform range-azimuth-elevation heatmap to pointcloud
         pcl = np.zeros((_num_el_bin, _num_az_bin, _num_r_num, 5))
 
-        for range_idx in range(1, _num_r_num):
-            for az_idx in range(1, _num_az_bin):
-                for el_idx in range(1, _num_el_bin):
-                    pcl[el_idx, az_idx, range_idx, :3] = self._polar_to_cartesian(
-                        range_idx - 1, az_idx - 1, el_idx - 1
-                    )
+        for range_idx in range(_num_r_num - 1):
+            for az_idx in range(_num_az_bin - 1):
+                for el_idx in range(_num_el_bin - 1):
+                    _el_bin: float = self.calibration.heatmap.elevation_bins[
+                        el_idx
+                    ]
+                    _az_bin: float = self.calibration.heatmap.azimuth_bins[
+                        az_idx
+                    ]
+                    pcl[el_idx + 1, az_idx + 1, range_idx + 1, :3] = np.array([
+                        _az_bin,                        # Azimuth
+                        (range_idx) * _range_bin_width,   # Range
+                        _el_bin,                        # Elevation
+                    ])
+
         pcl = pcl.reshape(-1,5)
         pcl[:,3:] = self.heatmap.reshape(-1, 2)
         # Normalise the radar reflection intensity

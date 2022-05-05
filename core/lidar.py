@@ -50,6 +50,10 @@ class Lidar(object):
     def show(self, render: bool = True) -> None:
         """Render the lidar pointcloud."""
         ax = plt.axes(projection="3d")
+        ax.set_title("Lidar pointcloud")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
         plot = ax.scatter(
             self.cld[:, 0],
             self.cld[:, 1],

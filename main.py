@@ -130,11 +130,13 @@ def main () -> None:
             sys.exit(0)
         elif args.scradar:
             if args.heatmap:
+                """
                 if args.bird_eye_view:
                     info("Rendering single chip radar heatmap bird eye view ...")
                     record.scradar.showHeatmapBirdEyeView(args.threshold)
                     success("Heatmap bird eye view closed!")
                     sys.exit(0)
+                """
                 info("Rendering single chip radar heatmap ...")
                 record.scradar.showHeatmap(args.threshold)
                 success("Heatmap closed!")
@@ -157,11 +159,13 @@ def main () -> None:
             sys.exit(0)
         elif args.ccradar:
             if args.heatmap:
+                """
                 if args.bird_eye_view:
                     info("Rendering cascade chip radar heatmap bird eye view ...")
                     record.ccradar.showHeatmapBirdEyeView(args.threshold)
                     success("Heatmap bird eye view closed!")
                     sys.exit(0)
+                """
                 info("Rendering cascade chip radar heatmap ...")
                 record.ccradar.showHeatmap(args.threshold)
                 success("Heatmap closed!")

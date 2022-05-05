@@ -8,6 +8,7 @@ from core.config import ROOTDIR, DATASET
 from core.calibration import Calibration
 from core.record import Record
 
+
 class Coloradar:
     """Coloradar dataset loader.
 
