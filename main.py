@@ -55,6 +55,11 @@ def main () -> None:
         action="store_true"
     )
     parser.add_argument(
+        "--raw",
+        help="Consider radar ADC measurement (only for scradar and ccradar)",
+        action="store_true"
+    )
+    parser.add_argument(
         "--heatmap",
         help="Render heatmap (only for scradar and ccradar)",
         action="store_true"
@@ -153,6 +158,11 @@ def main () -> None:
                 plt.show()
                 info("Bird Eye View closed!")
                 sys.exit(0)
+            elif args.raw:
+                info("Rendering processed raw radar ADC samples ...")
+                record.scradar.showRaw()
+                success("Successfully closed!")
+                sys.exit(0)
             info("Rendering lidar pointcloud ...")
             record.scradar.show()
             success("Successfully closed!")
@@ -181,6 +191,11 @@ def main () -> None:
                 plt.imshow(bev)
                 plt.show()
                 info("Bird Eye View closed!")
+                sys.exit(0)
+            elif args.raw:
+                info("Rendering processed raw radar ADC samples ...")
+                record.scradar.showRaw()
+                success("Successfully closed!")
                 sys.exit(0)
 
     parser.print_help()
