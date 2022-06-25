@@ -16,6 +16,8 @@ from .utils.common import error
 class Record:
     """Record.
 
+    Class describing records in the dataset
+
     Attributes:
         calibration: Calibration parameters
         lidar: Velodyne samples of the dataset record
@@ -33,6 +35,8 @@ class Record:
             index: Order number indicating the entry of the dataset in interest
         """
         self.calibration = calibration
+        self.descriptor = descriptor
+        self.index = index
         subdir: str = ""
         for dataset in descriptor["folders"]:
             if dataset["codename"] == codename:
@@ -40,7 +44,23 @@ class Record:
                 break
         if not subdir:
             error(f"Dataset codename '{codename}' not defined in '{DATASET}")
-        descriptor["paths"]["rootdir"] = os.path.join(ROOTDIR, subdir)
-        self.lidar = Lidar(descriptor, self.calibration, index)
-        self.scradar = SCRadar(descriptor, self.calibration, index)
-        self.ccradar = CCRadar(descriptor, self.calibration, index)
+        self.descriptor["paths"]["rootdir"] = os.path.join(ROOTDIR, subdir)
+        self.lidar = None
+        self.scradar = None
+        self.ccradar = None
+
+    def load(self, sensor: str) -> None:
+        """Load the data file for a given sensor.
+
+        Arguments:
+            sensor: The sensor considered so that only the data of that sensor
+                    would be loaded.
+                    Possible Values: lidar, scradar, ccradar
+        """
+
+        if sensor == "lidar":
+            self.lidar = Lidar(self.descriptor, self.calibration, self.index)
+        elif sensor == "scradar":
+            self.scradar = SCRadar(self.descriptor, self.calibration, self.index)
+        elif sensor == "ccradar":
+            self.ccradar = CCRadar(self.descriptor, self.calibration, self.index)

@@ -114,9 +114,11 @@ def main () -> None:
         sys.exit(0)
 
     if args.dataset and args.index:
+        # Get an instance of the Record class
         record = coloradar.getRecord(args.dataset, args.index)
 
         if args.lidar:
+            record.load("lidar")
             if args.bird_eye_view:
                 info("Rendering lidar pointcloud bird eye view ...")
                 bev = record.lidar.getBirdEyeView(
@@ -134,6 +136,7 @@ def main () -> None:
             success("Successfully closed!")
             sys.exit(0)
         elif args.scradar:
+            record.load("scradar")
             if args.heatmap:
                 """
                 if args.bird_eye_view:
@@ -160,7 +163,7 @@ def main () -> None:
                 sys.exit(0)
             elif args.raw:
                 info("Rendering processed raw radar ADC samples ...")
-                record.scradar.showRaw()
+                record.scradar.showHeatmapFromRaw(args.threshold)
                 success("Successfully closed!")
                 sys.exit(0)
             info("Rendering lidar pointcloud ...")
@@ -168,6 +171,7 @@ def main () -> None:
             success("Successfully closed!")
             sys.exit(0)
         elif args.ccradar:
+            record.load("ccradar")
             if args.heatmap:
                 """
                 if args.bird_eye_view:
@@ -194,7 +198,7 @@ def main () -> None:
                 sys.exit(0)
             elif args.raw:
                 info("Rendering processed raw radar ADC samples ...")
-                record.scradar.showRaw()
+                record.ccradar.showHeatmapFromRaw(args.threshold)
                 success("Successfully closed!")
                 sys.exit(0)
 
