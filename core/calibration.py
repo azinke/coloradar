@@ -1,5 +1,6 @@
 """Calibration module."""
-from logging import root
+import numpy as np
+
 import os
 import json
 from core.config import ROOTDIR
@@ -167,6 +168,10 @@ class PhaseCalibration:
                 "frequency_calibration_matrix",
                 config["antennaCalib"]["frequencyCalibrationMatrix"]
             )
+            setattr(self,
+                "phase_calibration_matrix",
+                config["antennaCalib"]["phaseCalibrationMatrix"]
+            )
 
 
 class SCRadarCalibration:
@@ -200,6 +205,15 @@ class SCRadarCalibration:
         self.waveform = WaveformConfiguration(config["waveform"])
         self.heatmap = HeatmapConfiguration(config["heatmap"])
 
+    def get_coupling_calibration(self) -> np.array:
+        """Return the coupling calibration array to apply on the range fft."""
+        return np.array(self.coupling.data).reshape(
+            self.coupling.num_tx,
+            self.coupling.num_rx,
+            1,
+            self.waveform.num_adc_samples_per_chirp,
+        )
+
 
 class CCRadarCalibration(SCRadarCalibration):
     """Cascade Chip Radar Calibration.
@@ -227,6 +241,51 @@ class CCRadarCalibration(SCRadarCalibration):
         """
         super(CCRadarCalibration, self).__init__(config)
         self.phase = PhaseCalibration(config["phase"])
+
+    def get_phase_calibration(self) -> np.array:
+        """Return the phase calibration array."""
+        # Phase calibrationm atrix
+        pm = np.array(self.phase.phase_calibration_matrix)
+        pm = pm[::2] + 1j * pm[1::2]
+        pm = pm[0] / pm
+        return pm.reshape(
+            self.phase.num_tx,
+            self.phase.num_rx,
+            1,
+            1
+        )
+
+    def get_frequency_calibration(self) -> np.array:
+        """Return the frequency calibration array."""
+        num_tx: int = self.phase.num_tx
+        num_rx: int = self.phase.num_rx
+
+        # Calibration frequency slope
+        fcal_slope: float = self.phase.frequency_slope
+        # Calibration sampling rate
+        cal_srate: int = self.phase.sampling_rate
+
+        fcal_matrix = np.array(self.phase.frequency_calibration_matrix)
+
+        fslope: float = self.waveform.frequency_slope
+        srate: int = self.waveform.adc_sample_frequency
+
+        # Delta P
+        # 
+        dp = fcal_matrix - fcal_matrix[0]
+
+        cal_matrix = 2 * np.pi * dp * (fslope / fcal_slope) * (cal_srate / srate)
+        cal_matrix /= self.waveform.num_adc_samples_per_chirp
+        cal_matrix.reshape(num_tx, num_rx)
+        cal_matrix = np.expand_dims(cal_matrix, -1) * np.arange(
+            self.waveform.num_adc_samples_per_chirp
+        )
+        return np.exp(-1j * cal_matrix).reshape(
+            num_tx,
+            num_rx,
+            1,
+            self.waveform.num_adc_samples_per_chirp
+        )
 
 
 class BaseTransform:

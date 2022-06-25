@@ -55,6 +55,11 @@ def main () -> None:
         action="store_true"
     )
     parser.add_argument(
+        "--raw",
+        help="Consider radar ADC measurement (only for scradar and ccradar)",
+        action="store_true"
+    )
+    parser.add_argument(
         "--heatmap",
         help="Render heatmap (only for scradar and ccradar)",
         action="store_true"
@@ -109,9 +114,11 @@ def main () -> None:
         sys.exit(0)
 
     if args.dataset and args.index:
+        # Get an instance of the Record class
         record = coloradar.getRecord(args.dataset, args.index)
 
         if args.lidar:
+            record.load("lidar")
             if args.bird_eye_view:
                 info("Rendering lidar pointcloud bird eye view ...")
                 bev = record.lidar.getBirdEyeView(
@@ -129,6 +136,7 @@ def main () -> None:
             success("Successfully closed!")
             sys.exit(0)
         elif args.scradar:
+            record.load("scradar")
             if args.heatmap:
                 """
                 if args.bird_eye_view:
@@ -153,11 +161,17 @@ def main () -> None:
                 plt.show()
                 info("Bird Eye View closed!")
                 sys.exit(0)
+            elif args.raw:
+                info("Rendering processed raw radar ADC samples ...")
+                record.scradar.showHeatmapFromRaw(args.threshold)
+                success("Successfully closed!")
+                sys.exit(0)
             info("Rendering lidar pointcloud ...")
             record.scradar.show()
             success("Successfully closed!")
             sys.exit(0)
         elif args.ccradar:
+            record.load("ccradar")
             if args.heatmap:
                 """
                 if args.bird_eye_view:
@@ -181,6 +195,11 @@ def main () -> None:
                 plt.imshow(bev)
                 plt.show()
                 info("Bird Eye View closed!")
+                sys.exit(0)
+            elif args.raw:
+                info("Rendering processed raw radar ADC samples ...")
+                record.ccradar.showHeatmapFromRaw(args.threshold)
+                success("Successfully closed!")
                 sys.exit(0)
 
     parser.print_help()
