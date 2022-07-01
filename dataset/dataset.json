@@ -29,8 +29,16 @@
   "datastore": {
     "folders": [
       {
-        "codename": "hall0",
+        "codename": "hallway0",
         "path": "12_21_2020_ec_hallways_run0"
+      },
+      {
+        "codename": "hallway1",
+        "path": "12_21_2020_ec_hallways_run1"
+      },
+      {
+        "codename": "outdoor0",
+        "path": "2_28_2021_outdoors_run0"
       }
     ],
     "paths": {

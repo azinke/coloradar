@@ -71,6 +71,12 @@ def main () -> None:
         default=0.15,
     )
     parser.add_argument(
+        "--no-sidelobe",
+        help="Skip the data within the first couple of meters to avoid sidelobes",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--bird-eye-view",
         "-bev",
         help="Request a bird eye view rendering",
@@ -146,7 +152,7 @@ def main () -> None:
                     sys.exit(0)
                 """
                 info("Rendering single chip radar heatmap ...")
-                record.scradar.showHeatmap(args.threshold)
+                record.scradar.showHeatmap(args.threshold, args.no_sidelobe)
                 success("Heatmap closed!")
                 sys.exit(0)
             elif args.bird_eye_view:
@@ -163,7 +169,7 @@ def main () -> None:
                 sys.exit(0)
             elif args.raw:
                 info("Rendering processed raw radar ADC samples ...")
-                record.scradar.showHeatmapFromRaw(args.threshold)
+                record.scradar.showHeatmapFromRaw(args.threshold, args.no_sidelobe)
                 success("Successfully closed!")
                 sys.exit(0)
             info("Rendering lidar pointcloud ...")
@@ -181,7 +187,7 @@ def main () -> None:
                     sys.exit(0)
                 """
                 info("Rendering cascade chip radar heatmap ...")
-                record.ccradar.showHeatmap(args.threshold)
+                record.ccradar.showHeatmap(args.threshold, args.no_sidelobe)
                 success("Heatmap closed!")
                 sys.exit(0)
             elif args.bird_eye_view:
@@ -198,7 +204,7 @@ def main () -> None:
                 sys.exit(0)
             elif args.raw:
                 info("Rendering processed raw radar ADC samples ...")
-                record.ccradar.showHeatmapFromRaw(args.threshold)
+                record.ccradar.showHeatmapFromRaw(args.threshold, args.no_sidelobe)
                 success("Successfully closed!")
                 sys.exit(0)
 

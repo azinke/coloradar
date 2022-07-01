@@ -113,11 +113,14 @@ class SCRadar(Lidar):
             error(f"File '{self.raw_meas_filepath}' not found.")
             sys.exit(1)
 
-    def showHeatmap(self, threshold: float = 0.15, render: bool = True) -> None:
+    def showHeatmap(self, threshold: float = 0.15, no_sidelobe: bool = False,
+                          render: bool = True) -> None:
         """Render heatmap.
 
         Argument:
             threshold: Value used to filter the pointcloud
+            no_sidelobe: Flag used to skip the close range data from rendering
+                         in order to avoid side lobes
             render: Flag triggering the rendering of the heatmap when 'true'.
         """
         ax = plt.axes(projection="3d")
@@ -125,7 +128,7 @@ class SCRadar(Lidar):
         ax.set_xlabel("Azimuth")
         ax.set_ylabel("Range")
         ax.set_zlabel("Elevation")
-        pcl = self._heatmap_to_pointcloud(threshold)
+        pcl = self._heatmap_to_pointcloud(threshold, no_sidelobe)
         plot = ax.scatter(
             pcl[:, 0],
             pcl[:, 1],
@@ -211,7 +214,8 @@ class SCRadar(Lidar):
         point[2] = r_idx * _range_bin_width * np.sin(_el_bin)
         return point
 
-    def _heatmap_to_pointcloud(self, threshold: float = 0.15) -> np.array:
+    def _heatmap_to_pointcloud(self, threshold: float = 0.15,
+                                     no_sidelobe: bool = False) -> np.array:
         """Compute pointcloud from heatmap.
 
         The recordings of the heatmap are stored in the polar form.
@@ -220,6 +224,8 @@ class SCRadar(Lidar):
 
         Argument:
             threshold (float): Threshold to filter the pointcloud
+            no_sidelobe: Flag used to skip the close range data from rendering
+                         in order to avoid side lobes
 
         Return
             pcl (np.array): the heatmap point locations
@@ -233,7 +239,13 @@ class SCRadar(Lidar):
         # transform range-azimuth-elevation heatmap to pointcloud
         pcl = np.zeros((_num_el_bin, _num_az_bin, _num_r_num, 5))
 
-        for range_idx in range(_num_r_num - 1):
+        # Range offset to count for the side lobes of the radar sensor
+        roffset: int = 5
+
+        if not no_sidelobe:
+            roffset = 0
+
+        for range_idx in range(roffset, _num_r_num - 1):
             for az_idx in range(_num_az_bin - 1):
                 for el_idx in range(_num_el_bin - 1):
                     _el_bin: float = self.calibration.heatmap.elevation_bins[
@@ -354,15 +366,22 @@ class SCRadar(Lidar):
         # Elevation esitamtion
         afft = np.fft.fft(afft, Ne, 0)
         afft = np.fft.fftshift(afft, 0)
-        return 20 * np.log10(np.abs(afft) + 1)
+
+        # Return the signal power
+        return np.abs(afft) ** 2
 
 
-    def showHeatmapFromRaw(self, threshold: float):
+    def showHeatmapFromRaw(self, threshold: float,
+                                no_sidelobe: bool = False) -> None:
         """Render the heatmap processed from the raw radar ADC samples.
 
         Argument:
             threshold: Threshold value for filtering the heatmap obtained
                        from the radar data processing
+            no_sidelobe: Flag used to skip the close range data from rendering
+                        in order to avoid side lobes:
+
+                        Consider Range > ~1.5m
         """
         ns: int = self.calibration.waveform.num_adc_samples_per_chirp
 
@@ -386,20 +405,29 @@ class SCRadar(Lidar):
         eres = np.pi / Ne
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
 
-        dpcl = self._process_raw_adc(Na, Ne)
-        dpcl = 20 * np.log10(np.abs(dpcl) + 1)
-        dpcl -= np.min(dpcl)
+        signal_power = self._process_raw_adc(Na, Ne)
+
+        dpcl = 10 * np.log10(signal_power + 1)
+        dpcl -= np.mean(dpcl)
         dpcl /= np.max(dpcl)
 
         hmap = np.zeros((Ne * Na * ns, 4))
 
+        # Range offset to count for the side lobes of the radar sensor
+        roffset: int = 10
+
+        if not no_sidelobe:
+            roffset = 0
+
         for elidx in range(Ne):
             for aidx in range(Na):
-                # for vidx in range(nc):
-                for ridx in range(ns):
-                    hmap[ridx + ns * ( aidx + Na * elidx)] = np.array(
-                        [rbins[ridx], abins[aidx], ebins[elidx], dpcl[elidx, aidx, ridx]]
-                    )
+                for ridx in range(roffset, ns):
+                    hmap[ridx + ns * ( aidx + Na * elidx)] = np.array([
+                        rbins[ridx],
+                        abins[aidx],
+                        ebins[elidx],
+                        dpcl[elidx, aidx, ridx]
+                    ])
 
         hmap = hmap[hmap[:, 3] > threshold]
         # Re-Normalise the radar reflection intensity after filtering
@@ -408,7 +436,13 @@ class SCRadar(Lidar):
 
         figure = plt.figure()
         ax = figure.add_subplot(projection="3d")
-        map = ax.scatter(hmap[:, 0], hmap[:, 1], hmap[:, 2], c=hmap[:, 3], cmap=plt.cm.get_cmap())
+        map = ax.scatter(
+            hmap[:, 0],
+            hmap[:, 1],
+            hmap[:, 2],
+            c=hmap[:, 3],
+            cmap=plt.cm.get_cmap()
+        )
         plt.colorbar(map, ax=ax)
         plt.show()
 
@@ -527,4 +561,6 @@ class CCRadar(SCRadar):
         # Elevation esitamtion
         afft = np.fft.fft(afft, Ne, 0)
         afft = np.fft.fftshift(afft, 0)
-        return 20 * np.log10(np.abs(afft) + 1)
+
+        # Return the signal power
+        return np.abs(afft) ** 2
