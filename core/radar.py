@@ -432,6 +432,7 @@ class SCRadar(Lidar):
         # Azimuth bins
         ares = np.pi / Na
         abins = np.arange(-np.pi/2, np.pi/2, ares)
+        # abins = np.flip(abins)
         # Elevation
         eres = np.pi / Ne
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
