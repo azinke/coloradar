@@ -432,7 +432,6 @@ class SCRadar(Lidar):
         # Azimuth bins
         ares = np.pi / Na
         abins = np.arange(-np.pi/2, np.pi/2, ares)
-        # abins = np.flip(abins)
         # Elevation
         eres = np.pi / Ne
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
@@ -490,7 +489,8 @@ class SCRadar(Lidar):
 
         print(f"Heatmap building time: {time() - stime} s")
 
-        hmap = hmap[hmap[:, 4] > threshold]
+        noise_floor: float = 0.4
+        hmap = hmap[hmap[:, 4] > (noise_floor + threshold)]
         # Re-Normalise the radar reflection intensity after filtering
         hmap[:, 4] -= np.quantile(hmap[:, 4], 0.96, method='weibull')
         hmap = hmap[hmap[:, 4] >  0]
