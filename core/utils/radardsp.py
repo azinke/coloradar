@@ -25,17 +25,6 @@ def steering_vector(txl: np.array, rxl: np.array,
         az: Azimuth angle
         el: Elevation angle
     """
-        # Shape of the virtual antenna array
-    va_shape: tuple = (
-        # Length of the elevation axis
-        # the "+1" is to count for the 0-indexing used
-        np.max(txl[:, 2]) + np.max(rxl[:, 2]) + 1,
-
-        # Length of the azimuth axis
-        # the "+1" is to count for the 0-indexing used
-        np.max(txl[:, 1]) + np.max(rxl[:, 1]) + 1,
-    )
-
     # Virtual antenna array steering vector
     svect = np.zeros(len(txl) * len(rxl), dtype=np.complex128)
 
@@ -65,7 +54,7 @@ def music(signal: np.array, txl: np.array, rxl: np.array,
         el_bins: Elevation bins
     """
     # Number of targets expected
-    T: int = 10
+    T: int = 100
 
     N = len(signal)
     signal = np.asmatrix(signal)
@@ -80,12 +69,12 @@ def music(signal: np.array, txl: np.array, rxl: np.array,
     V = eigvect[:, :T]
     Noise = eigvect[:, T:]
 
-    amap = np.zeros((len(el_bins), len(az_bins), 1), dtype=np.complex128)
+    amap = np.zeros((len(el_bins) * len(az_bins)), dtype=np.complex128)
 
     for eidx, el in enumerate(el_bins):
         for aidx, az in enumerate(az_bins):
             e = np.asmatrix(steering_vector(txl, rxl, az, el)).T
-            amap[eidx, aidx] = 1 / np.sum(e.H * np.asmatrix(Noise))
+            amap[aidx + eidx * len(az_bins)] = 1 / np.sum(e.H * np.asmatrix(Noise))
     amap = 20 * np.log10(np.abs(amap))
     return amap
 

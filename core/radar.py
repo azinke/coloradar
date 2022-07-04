@@ -299,7 +299,7 @@ class SCRadar(Lidar):
         tc: float = self.calibration.waveform.idle_time + te
 
         Na = 32
-        Ne = 16
+        Ne = 32
 
         if self.sensor != "scradar":
             adc_samples *= self.calibration.get_frequency_calibration()
@@ -327,8 +327,23 @@ class SCRadar(Lidar):
 
         spectrum = np.zeros((ns, Ne, Na, 1), dtype=np.complex128)
 
-        dfft = np.sum(dfft, -2)
+        signal = np.sum(dfft, (1, 2))
 
+        spectrum = rdsp.music(
+            signal, self.calibration.antenna.txl, self.calibration.antenna.rxl, abins, ebins
+        )
+        hmap = np.zeros((Na * Ne, 3))
+
+        for eidx in range(Ne):
+            for aidx in range(Na):
+                hmap_idx: int = aidx + Na * eidx
+                hmap[hmap_idx] = np.array([
+                    abins[aidx],
+                    ebins[eidx],
+                    spectrum[hmap_idx],
+                ])
+
+        '''
         # for vidx in range(nc):
         for ridx in range(ns):
             print(f">> {ridx} of {ns}")
@@ -339,7 +354,7 @@ class SCRadar(Lidar):
                 signal, self.calibration.antenna.txl, self.calibration.antenna.rxl, abins, ebins
             ))
         print("Finished!")
-        '''
+
         ax = plt.axes(projection="3d")
         ax.set_title("MUSIC Spectrum")
         ax.set_xlabel("Elevation")
@@ -354,7 +369,6 @@ class SCRadar(Lidar):
         )
         plt.colorbar(map, ax=ax)
         plt.show()
-        '''
 
         # dfft = 10 * np.log10(np.abs(dfft) + 1)
         # spectrum -= np.mean(spectrum)
@@ -374,7 +388,7 @@ class SCRadar(Lidar):
                         ebins[eidx],
                         spectrum[ridx, eidx, aidx][0],
                     ])
-
+        '''
         # noise_floor: float = -0.2
         # hmap = hmap[hmap[:, 2] > noise_floor]
         # Re-Normalise the radar reflection intensity after filtering
@@ -383,8 +397,8 @@ class SCRadar(Lidar):
 
         ax = plt.axes(projection="3d")
         ax.set_title("Test MUSIC")
-        ax.set_xlabel("Range")
-        ax.set_ylabel("Velocity")
+        ax.set_xlabel("Azimuth")
+        ax.set_ylabel("Elevation")
         ax.set_zlabel("Gain")
         map = ax.scatter(
             hmap[:, 0],
