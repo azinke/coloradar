@@ -7,14 +7,71 @@ pointcloud and heatmap.
 NOTE: Make sure that a calibration stage is applied to the raw ADC data
 before further processing.
 """
-from random import sample
-from typing import Optional
 import numpy as np
-from numpy.fft import fft
 
 
 # Speed of light
 C: float = 299792458.0
+
+
+def virtual_array(adc_samples: np.array,
+                  txl: list[list[int]],
+                  rxl: list[list[int]]) -> np.array:
+    """Generate the virtual antenna array matching the layout provided.
+
+    Arguments:
+        adc_samples: Raw ADC samples with the shape (ntx, nrx, nc, ns)
+                        ntx: Number of TX antenna
+                        nrx: Number of RX antenna
+                        nc: Number of chirps per frame
+                        ns: Number of samples per chirp
+        txl: TX antenna layout array
+                - Structure per row: [tx_idx, azimuth, elevation]
+                - Unit: Half a wavelength
+        rxl: RX antenna layout array
+                - Structure: [tx_idx, azimuth, elevation]
+                - Unit: Half a wavelength
+
+    Return:
+        The virtual antenna array of shape (nel, naz, nc, ns)
+            nel: Number of elevation layers
+            naz: Number of azimuth positions
+            nc, ns: See above (description of `adc_samples`)
+
+        See the variable `va_shape` to see how the shape is estimated
+    """
+    _, _, nc, ns = adc_samples.shape
+
+    # Shape of the virtual antenna array
+    va_shape: tuple = (
+        # Length of the elevation axis
+        # the "+1" is to count for the 0-indexing used
+        np.max(txl[:, 2]) + np.max(rxl[:, 2]) + 1,
+
+        # Length of the azimuth axis
+        # the "+1" is to count for the 0-indexing used
+        np.max(txl[:, 1]) + np.max(rxl[:, 1]) + 1,
+
+        # Number of chirps per frame
+        nc,
+
+        # Number of samples per chirp
+        ns,
+    )
+
+    # Virtual antenna array
+    va = np.zeros(va_shape, dtype=np.complex128)
+
+    # *idx: index of the antenna element
+    # *az: azimuth of the antenna element
+    # *el: elevation of the antenna element
+    for tidx, taz, tel in txl:
+        for ridx, raz, rel in rxl:
+            # When a given azimuth and elevation position is already
+            # populated, the new value is added to the previous to have
+            # a strong signal feedback
+            va[tel+rel, taz+raz, :, :] += adc_samples[tidx, ridx, :, :]
+    return va
 
 
 def fft_size(size: int) -> int:
@@ -96,14 +153,12 @@ def get_range_bins(ns: int, fs: float, fslope) -> np.array:
     return rres * np.arange(ns)
 
 
-def get_velocity_bins(ntx: int, nrx: int, nc: int, fstart: float,
-        tc: float)  -> np.array:
+def get_velocity_bins(ntx: int, nv: int, fstart: float, tc: float) -> np.array:
     """Compute the velocity bins
 
     Arguments:
         ntx:ntx: Number of transmission antenna
-        nrx: Number of reception antenna
-        nc: Number of chirps per frame
+        nv: Number of expected velocity bins
         fstart: Start frequency of the chirp
         tc: Chirp time
             tc = Idle time + End time
@@ -114,7 +169,7 @@ def get_velocity_bins(ntx: int, nrx: int, nc: int, fstart: float,
     vmax: float = (C / fstart) / (4.0 * tc * ntx)
     # Resolution used for rendering
     # Not the actual radar resolution
-    vres = vmax / nc
+    vres = vmax / nv
 
     bins = np.arange(-vmax/2, vmax/2, vres)
     return bins

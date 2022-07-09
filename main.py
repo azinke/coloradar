@@ -77,6 +77,17 @@ def main () -> None:
         default=False,
     )
     parser.add_argument(
+        "--velocity-view",
+        help=(
+            "Render the radar heatmap using velocity as the fourth dimension."
+            " By default, this parameter is false and the gain in dB is used"
+            "instead. However, it's only available for the processed raw ADC "
+            "samples."
+        ),
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--bird-eye-view",
         "-bev",
         help="Request a bird eye view rendering",
@@ -169,7 +180,11 @@ def main () -> None:
                 sys.exit(0)
             elif args.raw:
                 info("Rendering processed raw radar ADC samples ...")
-                record.scradar.showHeatmapFromRaw(args.threshold, args.no_sidelobe)
+                record.scradar.showHeatmapFromRaw(
+                    args.threshold,
+                    args.no_sidelobe,
+                    args.velocity_view,
+                )
                 success("Successfully closed!")
                 sys.exit(0)
             info("Rendering lidar pointcloud ...")
@@ -204,7 +219,11 @@ def main () -> None:
                 sys.exit(0)
             elif args.raw:
                 info("Rendering processed raw radar ADC samples ...")
-                record.ccradar.showHeatmapFromRaw(args.threshold, args.no_sidelobe)
+                record.ccradar.showHeatmapFromRaw(
+                    args.threshold,
+                    args.no_sidelobe,
+                    args.velocity_view,
+                )
                 success("Successfully closed!")
                 sys.exit(0)
 

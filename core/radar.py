@@ -5,6 +5,7 @@ CCRadar: Cascade Chip Radar Sensor
 """
 import os
 import sys
+from time import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -12,6 +13,11 @@ from core.calibration import Calibration, SCRadarCalibration
 from core.utils.common import error
 from core.utils import radardsp as rdsp
 from .lidar import Lidar
+
+from core.config import NUMBER_RANGE_BINS_MIN
+from core.config import NUMBER_DOPPLER_BINS_MIN
+from core.config import NUMBER_AZIMUTH_BINS_MIN
+from core.config import NUMBER_ELEVATION_BINS_MIN
 
 
 class SCRadar(Lidar):
@@ -35,19 +41,19 @@ class SCRadar(Lidar):
             calib (Calibration): Calibration object (See calibration.py)
             index (int): Index of the lidar record to load
         """
-        sensor: str = self.__class__.__name__.lower()
-        self.calibration: SCRadarCalibration = getattr(calib, sensor)
+        self.sensor: str = self.__class__.__name__.lower()
+        self.calibration: SCRadarCalibration = getattr(calib, self.sensor)
 
-        if sensor == "scradar":
+        if self.sensor == "scradar":
             # Read pointcloud
             filename: str = self._filename(
-                config["paths"][sensor]["pointcloud"]["filename_prefix"],
+                config["paths"][self.sensor]["pointcloud"]["filename_prefix"],
                 index,
                 "bin"
             )
             self.filepath = os.path.join(
                 config["paths"]["rootdir"],
-                config["paths"][sensor]["pointcloud"]["data"],
+                config["paths"][self.sensor]["pointcloud"]["data"],
                 filename
             )
             try:
@@ -59,13 +65,13 @@ class SCRadar(Lidar):
 
         # Read heatmap
         filename = self._filename(
-            config["paths"][sensor]["heatmap"]["filename_prefix"],
+            config["paths"][self.sensor]["heatmap"]["filename_prefix"],
             index,
             "bin"
         )
         self.heatmap_filepath = os.path.join(
             config["paths"]["rootdir"],
-            config["paths"][sensor]["heatmap"]["data"],
+            config["paths"][self.sensor]["heatmap"]["data"],
             filename
         )
         try:
@@ -85,13 +91,13 @@ class SCRadar(Lidar):
 
         # read raw ADC measurements
         filename = self._filename(
-            config["paths"][sensor]["raw"]["filename_prefix"],
+            config["paths"][self.sensor]["raw"]["filename_prefix"],
             index,
             "bin"
         )
         self.raw_meas_filepath = os.path.join(
             config["paths"]["rootdir"],
-            config["paths"][sensor]["raw"]["data"],
+            config["paths"][self.sensor]["raw"]["data"],
             filename
         )
         try:
@@ -239,7 +245,7 @@ class SCRadar(Lidar):
         # transform range-azimuth-elevation heatmap to pointcloud
         pcl = np.zeros((_num_el_bin, _num_az_bin, _num_r_num, 5))
 
-        # Range offset to count for the side lobes of the radar sensor
+        # Range offset to count for the side lobes of the radar self.sensor
         roffset: int = 5
 
         if not no_sidelobe:
@@ -272,107 +278,114 @@ class SCRadar(Lidar):
             pcl[:, 3] /= np.max(pcl[:, 3])
         return pcl
 
-    def _rx_antenna_layout(self) -> np.array:
-        """Return the layout of the RX antenna.
-
-        The spacing of the antenna is indicated in unit of 1/2 of wavelength
-
-            (rx0) <-- 1/2 lambda --> (rx1) <-- 1/2 lambda --> (rx2 ...)
-        """
-        return np.array([
-            0, 1, 2, 3,         # WR1
-        ])
-
-    def _az_tx_antenna_layout(self) -> np.array:
-        """Return the azimuth layout of the TX antenna.
-
-        The spacing of the antenna is indicated in unit of 1/2 of wavelength
-        """
-        return np.array([
-            0, 4
-        ])
-
-    def _el_tx_antenna_layout(self) -> np.array:
-        """Return the elevation layout of the TX antenna.
-
-        The spacing of the antenna is indicated in unit of 1/2 of wavelength
-        """
-        return np.array([
-           0, 2
-        ])
-
-    def _process_raw_adc(self, na: int = 64, ne: int = 16) -> np.array:
+    def _process_raw_adc(self) -> np.array:
         """Radar Signal Processing on raw ADC data.
 
         FFT Signal processing is applied on the raw Radar ADC samples.
         As a result, we get the Range, Doppler and Angle estimation of
         targets detected by the radar.
 
+        Since the number of antenna and device configuration can vary
+        from one board or recording to another,
+        it's good to define a minimum size for the doppler, azimuth, and
+        elevation FFT processing. Let's consider
+
+            (Azimuth) Na: 32 
+            (Elevation) Ne: 16
+
+        This does not affect the resolution of the radar sensor but only
+        the 3D rendeing.
+
+
+        A minimum elevation and azimuth bin size 
+
         NOTE: The Angle estimation based on FFT doesn't provide high accurary.
         Thus, more advanced methods like MUSIC or ESPRIT should be implemented.
-
-        Argument:
-            na: Size of azimuth FFT
-            ne: Size of elevation FFT
         """
         # Calibrate raw data
         adc_samples = self.raw
 
-        # Number of transmit antenna
-        ntx: int = self.calibration.waveform.num_tx
-        # Number of reception antenna
-        nrx: int = self.calibration.waveform.num_rx
-        # Number of chirps per frame
-        nc: int = self.calibration.waveform.num_chirps_per_frame
-        # Number of samples per chirp
-        ns: int = self.calibration.waveform.num_adc_samples_per_chirp
+        if self.sensor != "scradar":
+            adc_samples *= self.calibration.get_frequency_calibration()
+            adc_samples *= self.calibration.get_phase_calibration()
 
-        # Range-FFT
-        adc_samples *= np.blackman(ns).reshape(1, 1, -1)
-        rfft = np.fft.fft(adc_samples, ns, -1)
-        rfft = rfft - self.calibration.get_coupling_calibration()
-        rfft = rfft.reshape(ntx * nrx, nc, -1)
-
-        # Doppler-FFT
-        dfft = np.fft.fft(rfft, nc, -2)
-
-        dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
-        dfft = dfft.reshape(ntx * nrx, nc, -1)
-        dfft = np.fft.fftshift(dfft, 1)
-
-        # Size of azimuth FFT
-        Na: int = na
-        # Size of elevation FFT
-        Ne: int = ne
-
-        dfft = np.sum(dfft, 1)
-        dfft = dfft.reshape(ntx, nrx, ns)
-        # Zero filled virtual array
-        virtual_array = np.zeros((2, 8, ns), dtype=np.complex128)
-        virtual_array[1, :, :] = dfft[(0, 2), :].reshape(2 * nrx, ns)
-        r1 = dfft[1, :, :].reshape(nrx, ns)
-        virtual_array[0, 2:(2 + nrx), :] = r1
-
-        virtual_array = np.pad(
-            virtual_array,
-            ((0, ne - 2), (0, na - 8), (0, 0)),
-            "constant",
-            constant_values=((0, 0), (0, 0), (0, 0))
+        virtual_array = rdsp.virtual_array(
+            adc_samples,
+            self.calibration.antenna.txl,
+            self.calibration.antenna.rxl,
         )
 
+        # va_nel: Number of elevations in the virtual array
+        # va_naz: Number of azimuth in the virtual array
+        # va_nc: Number of chirp per antenna in the virtual array
+        # va_ns: Number of samples per chirp
+        va_nel, va_naz, va_nc, va_ns = virtual_array.shape
+
+        # Estimated size of the elevation and azimuth
+        Ne = rdsp.fft_size(va_nel)
+        Na = rdsp.fft_size(va_naz)
+        Na = Na if Na > NUMBER_AZIMUTH_BINS_MIN else NUMBER_AZIMUTH_BINS_MIN
+        Ne = (
+            Ne if Ne > NUMBER_ELEVATION_BINS_MIN else NUMBER_ELEVATION_BINS_MIN
+        )
+
+        # Size of doppler FFT
+        Nc = rdsp.fft_size(va_nc)
+        Nc = Nc if Nc > NUMBER_DOPPLER_BINS_MIN else NUMBER_DOPPLER_BINS_MIN
+
+        # Size of range FFT
+        Ns = rdsp.fft_size(va_ns)
+        Ns = Ns if Ns > NUMBER_RANGE_BINS_MIN else NUMBER_RANGE_BINS_MIN
+
+        virtual_array *= np.blackman(va_ns).reshape(1, 1, 1, -1)
+        virtual_array = np.pad(
+            virtual_array,
+            (
+                (0, Ne - va_nel), (0, Na - va_naz),
+                (0, Nc - va_nc), (0, Ns - va_ns)
+            ),
+            "constant",
+            constant_values=((0, 0), (0, 0), (0, 0), (0, 0))
+        )
+
+        coupling_calib = rdsp.virtual_array(
+            self.calibration.get_coupling_calibration(),
+            self.calibration.antenna.txl,
+            self.calibration.antenna.rxl,
+        )
+        coupling_calib = np.pad(
+            coupling_calib,
+            (
+                (0, Ne - va_nel), (0, Na - va_naz),
+                (0, 0), (0, Ns - va_ns)
+            ),
+            "constant",
+            constant_values=((0, 0), (0, 0), (0, 0), (0, 0))
+        )
+
+        # Range-FFT
+        # adc_samples *= np.blackman(ns).reshape(1, 1, -1)
+        rfft = np.fft.fft(virtual_array, Ns, -1)
+        rfft = rfft - coupling_calib
+
+        # Doppler-FFT
+        dfft = np.fft.fft(rfft, Nc, -2)
+        # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
+
         # Azimuth estimation
-        afft = np.fft.fft(virtual_array, Na, 1)
-        afft = np.fft.fftshift(afft, 1)
+        afft = np.fft.fft(dfft, Na, 1)
+
         # Elevation esitamtion
         afft = np.fft.fft(afft, Ne, 0)
-        afft = np.fft.fftshift(afft, 0)
+
+        afft = np.fft.fftshift(afft, (0, 1, 2))
 
         # Return the signal power
         return np.abs(afft) ** 2
 
 
     def showHeatmapFromRaw(self, threshold: float,
-                                no_sidelobe: bool = False) -> None:
+            no_sidelobe: bool = False, velocity_view: bool = False) -> None:
         """Render the heatmap processed from the raw radar ADC samples.
 
         Argument:
@@ -382,8 +395,13 @@ class SCRadar(Lidar):
                         in order to avoid side lobes:
 
                         Consider Range > ~1.5m
+            velocity_view: Render the heatmap using the velocity as the fourth
+                           dimension. When false, the signal gain in dB is used
+                           instead.
         """
-        ns: int = self.calibration.waveform.num_adc_samples_per_chirp
+        stime = time()
+
+        ntx: int = self.calibration.waveform.num_tx
 
         # ADC sampling frequency
         fs: float = self.calibration.waveform.adc_sample_frequency
@@ -391,13 +409,26 @@ class SCRadar(Lidar):
         # Frequency slope
         fslope: float = self.calibration.waveform.frequency_slope
 
-        # Size of azimuth FFT
-        Na: int = 64
-        # Size of elevation FFT
-        Ne: int = 16
+        # Start frequency
+        fstart: float = self.calibration.waveform.start_frequency
+
+        # Ramp end time
+        te: float = self.calibration.waveform.ramp_end_time
+
+        # Chirp time
+        tc: float = self.calibration.waveform.idle_time + te
+
+        signal_power = self._process_raw_adc()
+
+        print(f"Processing end time: {time() - stime} s")
+
+        # Size of elevation, azimuth, doppler, and range bins
+        Ne, Na, Nv, Nr = signal_power.shape
 
         # Range bins
-        rbins = rdsp.get_range_bins(ns, fs, fslope)
+        rbins = rdsp.get_range_bins(Nr, fs, fslope)
+        # Velocity bins
+        vbins = rdsp.get_velocity_bins(ntx, Nv, fstart, tc)
         # Azimuth bins
         ares = np.pi / Na
         abins = np.arange(-np.pi/2, np.pi/2, ares)
@@ -405,42 +436,76 @@ class SCRadar(Lidar):
         eres = np.pi / Ne
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
 
-        signal_power = self._process_raw_adc(Na, Ne)
-
         dpcl = 10 * np.log10(signal_power + 1)
-        dpcl -= np.mean(dpcl)
+        dpcl -= np.quantile(dpcl, 0.98, method='weibull')
         dpcl /= np.max(dpcl)
 
-        hmap = np.zeros((Ne * Na * ns, 4))
+        hmap = np.zeros((Ne * Na * Nv * Nr, 5))
 
-        # Range offset to count for the side lobes of the radar sensor
+        # Range offset to count for the side lobes of the radar self.sensor
         roffset: int = 10
 
-        if not no_sidelobe:
-            roffset = 0
+        if no_sidelobe:
+            dpcl[:, :, :, 0:roffset] = 0.0
+
+        '''
+        NOTE
+        -----
+        The time complexity of the nested loop below is in the order of:
+            Ne * Na* * Nv * ns (about N^4)
+        Hence it takes eons when higher resolution of rendering is used.
+        This motivated the vectorized implementation which is ~25 times faster.
 
         for elidx in range(Ne):
             for aidx in range(Na):
-                for ridx in range(roffset, ns):
-                    hmap[ridx + ns * ( aidx + Na * elidx)] = np.array([
-                        rbins[ridx],
-                        abins[aidx],
-                        ebins[elidx],
-                        dpcl[elidx, aidx, ridx]
-                    ])
+                for vidx in range(Nv):
+                    for ridx in range(roffset, ns):
+                        hmap_idx: int = ridx + ns * (
+                            vidx + Nv * ( aidx + Na * elidx)
+                        )
+                        hmap[hmap_idx] = np.array([
+                            abins[aidx],
+                            rbins[ridx],
+                            ebins[elidx],
+                            vbins[vidx],
+                            dpcl[elidx, aidx, vidx, ridx],
+                        ])
+        '''
+        stime = time()
+        hmap[:, 0] = np.repeat(
+            [np.repeat(abins, Nv * Nr)],
+            Ne, axis=0
+        ).reshape(-1)
+        hmap[:, 1] = np.repeat(
+            [np.repeat([np.repeat([rbins], Nv, axis=0)], Na, axis=0)],
+            Ne, axis=0
+        ).reshape(-1)
+        hmap[:, 2] = np.repeat(ebins, Na * Nv * Nr)
+        hmap[:, 3] = np.repeat(
+            [np.repeat([np.repeat(vbins, Nr)], Na, axis=0)],
+            Ne, axis=0
+        ).reshape(-1)
+        hmap[:, 4] = dpcl.reshape(-1)
 
-        hmap = hmap[hmap[:, 3] > threshold]
+        print(f"Heatmap building time: {time() - stime} s")
+
+        hmap = hmap[hmap[:, 4] > threshold]
         # Re-Normalise the radar reflection intensity after filtering
-        hmap[:, 3] -= np.min(hmap[:, 3])
-        hmap[:, 3] /= np.max(hmap[:, 3])
+        hmap[:, 4] -= np.quantile(hmap[:, 4], 0.96, method='weibull')
+        hmap = hmap[hmap[:, 4] >  0]
+        hmap[:, 4] -= np.min(hmap[:, 4])
+        hmap[:, 4] /= np.max(hmap[:, 4])
 
-        figure = plt.figure()
-        ax = figure.add_subplot(projection="3d")
+        ax = plt.axes(projection="3d")
+        ax.set_title("4D-FFT processing of raw ADC samples")
+        ax.set_xlabel("Azimuth")
+        ax.set_ylabel("Range")
+        ax.set_zlabel("Elevation")
         map = ax.scatter(
             hmap[:, 0],
             hmap[:, 1],
             hmap[:, 2],
-            c=hmap[:, 3],
+            c=hmap[:, 3] if velocity_view else hmap[:, 4],
             cmap=plt.cm.get_cmap()
         )
         plt.colorbar(map, ax=ax)
@@ -467,100 +532,3 @@ class CCRadar(SCRadar):
             1
         )
         return phase_calibrated_mtx
-
-    def _rx_antenna_layout(self) -> np.array:
-        """Return the layout of the RX antenna.
-
-        The spacing of the antenna is indicated in unit of 1/2 of wavelength
-
-            (rx0) <-- 1/2 lambda --> (rx1) <-- 1/2 lambda --> (rx2 ...)
-        """
-        return np.array([
-            0, 1, 2, 3,         # WR4
-            11, 12, 13, 14,     # WR1
-            46, 47, 48, 49,     # WR3
-            50, 51, 52, 53      # WR2
-        ])
-
-    def _az_tx_antenna_layout(self) -> np.array:
-        """Return the azimuth layout of the TX antenna.
-
-        The spacing of the antenna is indicated in unit of 1/2 of wavelength
-        """
-        return np.array([
-            0, 4, 8,        # WR4
-            12, 16, 20,     # WR3
-            24, 28, 32      # WR2
-        ])
-
-    def _el_tx_antenna_layout(self) -> np.array:
-        """Return the elevation layout of the TX antenna.
-
-        The spacing of the antenna is indicated in unit of 1/2 of wavelength
-        """
-        return np.array([
-           0, 1, 4, 6          # WR1
-        ])
-
-    def _process_raw_adc(self, na: int = 64, ne: int = 16) -> np.array:
-        """Process raw radar ADC samples.
-
-        Argument:
-            na: Size of azimuth FFT
-            ne: Size of elevation FFT
-        """
-        # Calibrate raw data
-        adc_samples = self.raw
-        adc_samples *= self.calibration.get_frequency_calibration()
-        adc_samples *= self.calibration.get_phase_calibration()
-
-        # Number of transmit antenna
-        ntx: int = self.calibration.waveform.num_tx
-        # Number of reception antenna
-        nrx: int = self.calibration.waveform.num_rx
-        # Number of chirps per frame
-        nc: int = self.calibration.waveform.num_chirps_per_frame
-        # Number of samples per chirp
-        ns: int = self.calibration.waveform.num_adc_samples_per_chirp
-
-        # Range-FFT
-        adc_samples *= np.blackman(ns).reshape(1, 1, -1)
-        rfft = np.fft.fft(adc_samples, ns, -1)
-        rfft = rfft - self.calibration.get_coupling_calibration()
-        rfft = rfft.reshape(ntx * nrx, nc, -1)
-
-        # Doppler-FFT
-        dfft = np.fft.fft(rfft, nc, -2)
-
-        dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
-        dfft = np.fft.fftshift(dfft, 1)
-        dfft = np.sum(dfft, 1).reshape(ntx, nrx, ns)
-
-        virtual_array = np.zeros((7, 144, ns), dtype=np.complex128)
-        virtual_array[0, :, :] = dfft[3:, :, :].reshape(-1, ns)
-        virtual_array[1, :16, :] = dfft[0, :, :].reshape(-1, ns)
-        virtual_array[4, :16, :] = dfft[1, :, :].reshape(-1, ns)
-        virtual_array[6, :16, :] = dfft[2, :, :].reshape(-1, ns)
-
-        virtual_array = np.pad(
-            virtual_array,
-            ((0, ne - 7), (0, 0), (0, 0)),
-            "constant",
-            constant_values=((0, 0), (0, 0), (0, 0))
-        )
-
-        # Size of azimuth FFT
-        Na: int = na
-        # Size of elevation FFT
-        Ne: int = ne
-
-        # Azimuth estimation
-        afft = np.fft.fft(virtual_array, Na, 1)
-        afft = np.fft.fftshift(afft, 1)
-
-        # Elevation esitamtion
-        afft = np.fft.fft(afft, Ne, 0)
-        afft = np.fft.fftshift(afft, 0)
-
-        # Return the signal power
-        return np.abs(afft) ** 2

@@ -20,10 +20,21 @@ class AntennaConfig:
         num_rx (int): Number of reception antenna
         num_tx (int): Number of transmission antenna
         f_design (float): Base frequency the sensor has been designed for
-        rx (list[list[int]]): Array describing the configuration of the
+        rxl (NDArray): Array describing the configuration of the
             reception antenna in unit of half-wavelengths
-        tx (list[list[int]]): Array describing the configuration of the
+        txl (NDArray): Array describing the configuration of the
             transmission antenna in unit of half-wavelengths
+
+    NOTE:
+        The 'rxl' and 'txl' arrays describe the antenna layout using the
+        followinf structure [idx az, el].
+
+        Thus, the first column indicates the index number of the array.
+        The second is the azimuth position of each antenna in half a wave
+        length and the last column their elevation position.
+
+        It's important to keep in mind that the row wise ordering of those
+        matrices is [dev4, dev1, dev3, dev2] for the cascade radar.
     """
 
     def __init__(self, filepath: str) -> None:
@@ -32,22 +43,24 @@ class AntennaConfig:
         Argument:
             filepath: Path to the antenna configuration file
         """
-        self.rx = []
-        self.tx = []
+        rxl = []    # RX layout
+        txl = []    # TX layout
         with open(os.path.join(ROOTDIR, filepath), "r") as fh:
             for line in fh:
                 if line.startswith("# "):
                     continue
                 else:
-                    chunks = line.split(" ")
+                    chunks = line.strip().split(" ")
                     if chunks[0] == "rx":
-                        self.rx.append([int(x) for x in chunks[1:-1]])
+                        rxl.append([int(x) for x in chunks[1:]])
                     elif chunks[0] == "tx":
-                        self.tx.append([int(x) for x in chunks[1:-1]])
+                        txl.append([int(x) for x in chunks[1:]])
                     else:
                         setattr(self, chunks[0].lower(), float(chunks[1]))
         self.num_rx = int(self.num_rx)
         self.num_tx = int(self.num_tx)
+        self.rxl = np.array(rxl)
+        self.txl = np.array(txl)
 
 
 class CouplingCalibration:
