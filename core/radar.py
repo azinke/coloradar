@@ -3,6 +3,7 @@
 SCRadar: Single Chip Radar Sensor
 CCRadar: Cascade Chip Radar Sensor
 """
+from typing import Optional
 import os
 import sys
 from time import time
@@ -385,7 +386,10 @@ class SCRadar(Lidar):
 
 
     def showHeatmapFromRaw(self, threshold: float,
-            no_sidelobe: bool = False, velocity_view: bool = False) -> None:
+            no_sidelobe: bool = False,
+            velocity_view: bool = False,
+            ranges: Optional[tuple[float, float]] = None,
+            azimuths: Optional[tuple[float, float]] = None) -> None:
         """Render the heatmap processed from the raw radar ADC samples.
 
         Argument:
@@ -398,6 +402,10 @@ class SCRadar(Lidar):
             velocity_view: Render the heatmap using the velocity as the fourth
                            dimension. When false, the signal gain in dB is used
                            instead.
+            ranges (tuple): Min and max value of the range to render
+                            Format: (min_range, max_range)
+            azimuths (tuple): Min and max value of azimuth to render
+                            Format: (min_azimuth, max_azimuth)
         """
         stime = time()
 
@@ -488,6 +496,20 @@ class SCRadar(Lidar):
         hmap[:, 4] = dpcl.reshape(-1)
 
         print(f"Heatmap building time: {time() - stime} s")
+
+        # Filtering ranges
+        min_range, max_range = ranges
+        if min_range is not None:
+            hmap = hmap[hmap[:, 1] > min_range]
+        if max_range is not None:
+            hmap = hmap[hmap[:, 1] < max_range]
+
+        # Filtering azimuths
+        min_az, max_az= azimuths
+        if min_az is not None:
+            hmap = hmap[hmap[:, 0] > min_az]
+        if max_az is not None:
+            hmap = hmap[hmap[:, 0] < max_az]
 
         hmap = hmap[hmap[:, 4] > threshold]
         # Re-Normalise the radar reflection intensity after filtering

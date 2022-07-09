@@ -119,6 +119,45 @@ def main () -> None:
             "a given dataset entry",
         action="store_true"
     )
+
+    # Parameters to control the rendering of the heatmap
+    parser.add_argument(
+        "--range",
+        help="Range to focus the heatmap on",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--min-range",
+        help="Min Range to render in the heatmap",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--max-range",
+        help="Max Range to render in the heatmap",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--azimuth",
+        help="Azimuth to focus the heatmap on",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--min-azimuth",
+        help="Azimuth to focus the heatmap on",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--max-azimuth",
+        help="Azimuth to focus the heatmap on",
+        type=float,
+        default=None
+    )
+
     args = parser.parse_args()
 
     coloradar = Coloradar()
@@ -184,6 +223,8 @@ def main () -> None:
                     args.threshold,
                     args.no_sidelobe,
                     args.velocity_view,
+                    (args.min_range, args.max_range),
+                    (args.min_azimuth, args.max_azimuth),
                 )
                 success("Successfully closed!")
                 sys.exit(0)
@@ -223,6 +264,8 @@ def main () -> None:
                     args.threshold,
                     args.no_sidelobe,
                     args.velocity_view,
+                    (args.min_range, args.max_range),
+                    (args.min_azimuth, args.max_azimuth),
                 )
                 success("Successfully closed!")
                 sys.exit(0)
