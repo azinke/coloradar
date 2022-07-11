@@ -65,6 +65,11 @@ def main () -> None:
         action="store_true"
     )
     parser.add_argument(
+        "--heatmap-2d",
+        help="Render 2D heatmap (only for scradar and ccradar)",
+        action="store_true"
+    )
+    parser.add_argument(
         "--threshold",
         help="Threshold for filtering heatmap pointcloud",
         type=float,
@@ -259,6 +264,9 @@ def main () -> None:
                 info("Bird Eye View closed!")
                 sys.exit(0)
             elif args.raw:
+                if args.heatmap_2d:
+                    record.ccradar.show2dHeatmap(args.threshold)
+                    sys.exit(0)
                 info("Rendering processed raw radar ADC samples ...")
                 record.ccradar.showHeatmapFromRaw(
                     args.threshold,

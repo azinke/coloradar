@@ -384,6 +384,86 @@ class SCRadar(Lidar):
         # Return the signal power
         return np.abs(afft) ** 2
 
+    def _process_raw_adc_2d(self) -> np.array:
+        """Radar Signal Processing on raw ADC data.
+
+        FFT Signal processing is applied on the raw Radar ADC samples.
+        As a result, we get the Range, Doppler and Azimuth estimation of
+        targets detected by the radar.
+
+        NOTE: The Angle estimation based on FFT doesn't provide high accurary.
+        Thus, more advanced methods like MUSIC or ESPRIT should be implemented.
+        """
+        # Calibrate raw data
+        adc_samples = self.raw
+
+        if self.sensor != "scradar":
+            adc_samples *= self.calibration.get_frequency_calibration()
+            adc_samples *= self.calibration.get_phase_calibration()
+
+        virtual_array = rdsp.virtual_array(
+            adc_samples,
+            self.calibration.antenna.txl,
+            self.calibration.antenna.rxl,
+        )
+
+        # Only consider azimuth on elevation 0
+        virtual_array = np.sum(virtual_array, 0)
+
+        # va_naz: Number of azimuth in the virtual array
+        # va_nc: Number of chirp per antenna in the virtual array
+        # va_ns: Number of samples per chirp
+        va_naz, va_nc, va_ns = virtual_array.shape
+
+        # Estimated size of the azimuth
+        Na = rdsp.fft_size(va_naz)
+        Na = Na if Na > NUMBER_AZIMUTH_BINS_MIN else NUMBER_AZIMUTH_BINS_MIN
+
+        # Size of doppler FFT
+        Nc = rdsp.fft_size(va_nc)
+        Nc = Nc if Nc > NUMBER_DOPPLER_BINS_MIN else NUMBER_DOPPLER_BINS_MIN
+
+        # Size of range FFT
+        Ns = rdsp.fft_size(va_ns)
+        Ns = Ns if Ns > NUMBER_RANGE_BINS_MIN else NUMBER_RANGE_BINS_MIN
+
+        virtual_array *= np.blackman(va_ns).reshape(1, 1, -1)
+        virtual_array = np.pad(
+            virtual_array,
+            ((0, Na - va_naz), (0, Nc - va_nc), (0, Ns - va_ns)),
+            "constant",
+            constant_values=((0, 0), (0, 0), (0, 0))
+        )
+
+        coupling_calib = rdsp.virtual_array(
+            self.calibration.get_coupling_calibration(),
+            self.calibration.antenna.txl,
+            self.calibration.antenna.rxl,
+        )
+        coupling_calib = np.sum(coupling_calib, 0)
+        coupling_calib = np.pad(
+            coupling_calib,
+            ((0, Na - va_naz), (0, 0), (0, Ns - va_ns)),
+            "constant",
+            constant_values=((0, 0), (0, 0), (0, 0))
+        )
+
+        # Range-FFT
+        # adc_samples *= np.blackman(ns).reshape(1, 1, -1)
+        rfft = np.fft.fft(virtual_array, Ns, -1)
+        rfft = rfft - coupling_calib
+
+        # Doppler-FFT
+        dfft = np.fft.fft(rfft, Nc, 1)
+        # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
+
+        # Azimuth estimation
+        afft = np.fft.fft(dfft, Na, 0)
+
+        afft = np.fft.fftshift(afft, (0, 1))
+
+        # Return the signal power
+        return np.abs(afft) ** 2
 
     def showHeatmapFromRaw(self, threshold: float,
             no_sidelobe: bool = False,
@@ -445,7 +525,7 @@ class SCRadar(Lidar):
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
 
         dpcl = 10 * np.log10(signal_power + 1)
-        dpcl -= np.quantile(dpcl, 0.98, method='weibull')
+        dpcl -= np.abs(np.quantile(dpcl, 0.98, method='weibull'))
         dpcl /= np.max(dpcl)
 
         hmap = np.zeros((Ne * Na * Nv * Nr, 5))
@@ -513,7 +593,7 @@ class SCRadar(Lidar):
 
         hmap = hmap[hmap[:, 4] > threshold]
         # Re-Normalise the radar reflection intensity after filtering
-        hmap[:, 4] -= np.quantile(hmap[:, 4], 0.96, method='weibull')
+        hmap[:, 4] -= np.abs(np.quantile(hmap[:, 4], 0.96, method='weibull'))
         hmap = hmap[hmap[:, 4] >  0]
         hmap[:, 4] -= np.min(hmap[:, 4])
         hmap[:, 4] /= np.max(hmap[:, 4])
@@ -531,6 +611,43 @@ class SCRadar(Lidar):
             cmap=plt.cm.get_cmap()
         )
         plt.colorbar(map, ax=ax)
+        plt.show()
+
+    def show2dHeatmap(self, threshold: float) -> None:
+        """Show 2D heatmap.
+
+        Argument:
+            threshold: Threshold value for filtering the heatmap obtained
+                       from the radar data processing
+        """
+        # ADC sampling frequency
+        fs: float = self.calibration.waveform.adc_sample_frequency
+
+        # Frequency slope
+        fslope: float = self.calibration.waveform.frequency_slope
+
+        signal_power = self._process_raw_adc_2d()
+
+        # Size of elevation, azimuth, doppler, and range bins
+        Na, Nv, Nr = signal_power.shape
+
+        # Range bins
+        rbins = rdsp.get_range_bins(Nr, fs, fslope) # np.arange(0, Nr)
+        # Azimuth bins
+        ares = np.pi / Na
+        abins = np.arange(-np.pi/2, np.pi/2, ares) # np.arange(0, Na)
+
+        dpcl = 20 * np.log10(signal_power + 1)
+        dpcl -= np.abs(np.quantile(dpcl, 0.95, method='weibull'))
+        dpcl /= np.max(dpcl)
+        dpcl[dpcl < threshold] = 0.0
+
+        _, ax = plt.subplots()
+        dpcl = np.sum(dpcl, 1)
+        dpcl = np.transpose(dpcl, (1, 0))
+        az, rg = np.meshgrid(abins, rbins)
+        color = ax.pcolormesh(az, rg, dpcl, cmap="CMRmap")
+        plt.colorbar(color, ax=ax)
         plt.show()
 
 
