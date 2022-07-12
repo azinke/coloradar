@@ -7,11 +7,76 @@ pointcloud and heatmap.
 NOTE: Make sure that a calibration stage is applied to the raw ADC data
 before further processing.
 """
+from errno import EILSEQ
 import numpy as np
 
 
 # Speed of light
 C: float = 299792458.0
+
+
+def steering_vector(txl: np.array, rxl: np.array,
+                            az: float, el: float,) -> np.array:
+    """Steering vector.
+
+    Arguments:
+        txl: TX Antenna layout
+        rxl: RX Antenna layout
+        az: Azimuth angle
+        el: Elevation angle
+    """
+    # Virtual antenna array steering vector
+    svect = np.zeros(len(txl) * len(rxl), dtype=np.complex128)
+
+    # *idx: index of the antenna element
+    # *az: azimuth of the antenna element
+    # *el: elevation of the antenna element
+    for tidx, taz, tel in txl:
+        for ridx, raz, rel in rxl:
+            svect[ridx + tidx * len(rxl)] = np.exp(
+                1j * np.pi * (
+                    (taz+raz)* np.cos(az) * np.sin(el) + (tel+rel) * np.cos(el)
+            ))
+    return svect
+
+
+def music(signal: np.array, txl: np.array, rxl: np.array,
+          az_bins: np.array, el_bins: np.array) -> np.array:
+    """MUSIC Direction of Arrival estimation algorithm.
+
+    Arguments:
+        signal: Signal received by all the antenna element
+                Is expected to be the combined received signal on each antenna
+                element.
+        txl: TX Antenna layout
+        rxl: RX Antenna layout
+        az_bins: Azimuth bins
+        el_bins: Elevation bins
+    """
+    # Number of targets expected
+    T: int = 100
+
+    N = len(signal)
+    signal = np.asmatrix(signal)
+    # Covariance of the received signal
+    R = (1.0 / N) * signal.H * signal
+
+    eigval, eigvect = np.linalg.eig(R)
+    idx = eigval.argsort()[::-1]
+    eigval = eigval[idx]
+    eigvect = eigvect[:, idx]
+
+    V = eigvect[:, :T]
+    Noise = eigvect[:, T:]
+
+    amap = np.zeros((len(el_bins) * len(az_bins)), dtype=np.complex128)
+
+    for eidx, el in enumerate(el_bins):
+        for aidx, az in enumerate(az_bins):
+            e = np.asmatrix(steering_vector(txl, rxl, az, el)).T
+            amap[aidx + eidx * len(az_bins)] = 1 / np.sum(e.H * np.asmatrix(Noise))
+    amap = 20 * np.log10(np.abs(amap))
+    return amap
 
 
 def virtual_array(adc_samples: np.array,

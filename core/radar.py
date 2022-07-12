@@ -279,6 +279,140 @@ class SCRadar(Lidar):
             pcl[:, 3] /= np.max(pcl[:, 3])
         return pcl
 
+    def _music(self) -> None:
+        """."""
+        # Calibrate raw data
+        adc_samples = self.raw
+
+        # ADC sampling frequency
+        fs: float = self.calibration.waveform.adc_sample_frequency
+
+        # Frequency slope
+        fslope: float = self.calibration.waveform.frequency_slope
+
+        # Start frequency
+        fstart: float = self.calibration.waveform.start_frequency
+
+        # Ramp end time
+        te: float = self.calibration.waveform.ramp_end_time
+
+        # Chirp time
+        tc: float = self.calibration.waveform.idle_time + te
+
+        Na = 32
+        Ne = 32
+
+        if self.sensor != "scradar":
+            adc_samples *= self.calibration.get_frequency_calibration()
+            adc_samples *= self.calibration.get_phase_calibration()
+
+        ntx, nrx, nc, ns = adc_samples.shape
+
+        rfft = np.fft.fft(adc_samples, ns, -1) - self.calibration.get_coupling_calibration()
+        dfft = np.fft.fft(rfft, nc, -2)
+        dfft = np.fft.fftshift(dfft, -2)
+        dfft = dfft.reshape(ntx * nrx, nc, ns)
+
+        # signal = np.sum(dfft, (1, 2))
+        # print("signal shape: ", signal.shape)
+
+        vbins = rdsp.get_velocity_bins(ntx, nc, fstart, tc)
+        rbins = rdsp.get_range_bins(ns, fs, fslope)
+
+        # Azimuth bins
+        ares = np.pi / Na
+        abins = np.arange(-np.pi/2, np.pi/2, ares)
+        # Elevation
+        eres = np.pi / Ne
+        ebins = np.arange(-np.pi/2, np.pi/2, eres)
+
+        spectrum = np.zeros((ns, Ne, Na, 1), dtype=np.complex128)
+
+        signal = np.sum(dfft, (1, 2))
+
+        spectrum = rdsp.music(
+            signal, self.calibration.antenna.txl, self.calibration.antenna.rxl, abins, ebins
+        )
+        hmap = np.zeros((Na * Ne, 3))
+
+        for eidx in range(Ne):
+            for aidx in range(Na):
+                hmap_idx: int = aidx + Na * eidx
+                hmap[hmap_idx] = np.array([
+                    abins[aidx],
+                    ebins[eidx],
+                    spectrum[hmap_idx],
+                ])
+
+        '''
+        # for vidx in range(nc):
+        for ridx in range(ns):
+            print(f">> {ridx} of {ns}")
+            signal = dfft[:, ridx]
+            # hmap[ridx + vidx * ns, 0] = rbins[ridx]
+            # hmap[ridx + vidx * ns, 1] = vbins[vidx]
+            spectrum[ridx] = np.max(rdsp.music(
+                signal, self.calibration.antenna.txl, self.calibration.antenna.rxl, abins, ebins
+            ))
+        print("Finished!")
+
+        ax = plt.axes(projection="3d")
+        ax.set_title("MUSIC Spectrum")
+        ax.set_xlabel("Elevation")
+        ax.set_ylabel("Azimuth")
+        ax.set_zlabel("Gain")
+        map = ax.scatter(
+            doa[:, 0],
+            doa[:, 1],
+            doa[:, 2],
+            c=doa[:, 2],
+            cmap=plt.cm.get_cmap()
+        )
+        plt.colorbar(map, ax=ax)
+        plt.show()
+
+        # dfft = 10 * np.log10(np.abs(dfft) + 1)
+        # spectrum -= np.mean(spectrum)
+        # spectrum /= np.max(spectrum)
+
+
+        hmap = np.zeros((Na * Ne * ns, 4))
+
+        for eidx in range(Ne):
+            for aidx in range(Na):
+                # for vidx in range(nc):
+                for ridx in range(ns):
+                    hmap_idx: int = ridx + ns * (aidx + Na * eidx)
+                    hmap[hmap_idx] = np.array([
+                        abins[aidx],
+                        rbins[ridx],
+                        ebins[eidx],
+                        spectrum[ridx, eidx, aidx][0],
+                    ])
+        '''
+        # noise_floor: float = -0.2
+        # hmap = hmap[hmap[:, 2] > noise_floor]
+        # Re-Normalise the radar reflection intensity after filtering
+        # hmap[:, 2] -= np.min(hmap[:, 2])
+        # hmap[:, 2] /= np.max(hmap[:, 2])
+
+        ax = plt.axes(projection="3d")
+        ax.set_title("Test MUSIC")
+        ax.set_xlabel("Azimuth")
+        ax.set_ylabel("Elevation")
+        ax.set_zlabel("Gain")
+        map = ax.scatter(
+            hmap[:, 0],
+            hmap[:, 1],
+            hmap[:, 2],
+            c=hmap[:, 2],
+            cmap=plt.cm.get_cmap()
+        )
+        plt.colorbar(map, ax=ax)
+        plt.show()
+        sys.exit(0)
+
+
     def _process_raw_adc(self) -> np.array:
         """Radar Signal Processing on raw ADC data.
 
@@ -303,6 +437,7 @@ class SCRadar(Lidar):
         NOTE: The Angle estimation based on FFT doesn't provide high accurary.
         Thus, more advanced methods like MUSIC or ESPRIT should be implemented.
         """
+        self._music()
         # Calibrate raw data
         adc_samples = self.raw
 
