@@ -65,6 +65,11 @@ def main () -> None:
         action="store_true"
     )
     parser.add_argument(
+        "--heatmap-2d",
+        help="Render 2D heatmap (only for scradar and ccradar)",
+        action="store_true"
+    )
+    parser.add_argument(
         "--threshold",
         help="Threshold for filtering heatmap pointcloud",
         type=float,
@@ -119,6 +124,45 @@ def main () -> None:
             "a given dataset entry",
         action="store_true"
     )
+
+    # Parameters to control the rendering of the heatmap
+    parser.add_argument(
+        "--range",
+        help="Range to focus the heatmap on",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--min-range",
+        help="Min Range to render in the heatmap",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--max-range",
+        help="Max Range to render in the heatmap",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--azimuth",
+        help="Azimuth to focus the heatmap on",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--min-azimuth",
+        help="Azimuth to focus the heatmap on",
+        type=float,
+        default=None
+    )
+    parser.add_argument(
+        "--max-azimuth",
+        help="Azimuth to focus the heatmap on",
+        type=float,
+        default=None
+    )
+
     args = parser.parse_args()
 
     coloradar = Coloradar()
@@ -184,6 +228,8 @@ def main () -> None:
                     args.threshold,
                     args.no_sidelobe,
                     args.velocity_view,
+                    (args.min_range, args.max_range),
+                    (args.min_azimuth, args.max_azimuth),
                 )
                 success("Successfully closed!")
                 sys.exit(0)
@@ -218,11 +264,18 @@ def main () -> None:
                 info("Bird Eye View closed!")
                 sys.exit(0)
             elif args.raw:
-                info("Rendering processed raw radar ADC samples ...")
+                info("Processing raw ADC samples.")
+                if args.heatmap_2d:
+                    info("Rendering 2D heatmap ...")
+                    record.ccradar.show2dHeatmap(args.threshold)
+                    sys.exit(0)
+                info("Rendering 4D heatmap ...")
                 record.ccradar.showHeatmapFromRaw(
                     args.threshold,
                     args.no_sidelobe,
                     args.velocity_view,
+                    (args.min_range, args.max_range),
+                    (args.min_azimuth, args.max_azimuth),
                 )
                 success("Successfully closed!")
                 sys.exit(0)
