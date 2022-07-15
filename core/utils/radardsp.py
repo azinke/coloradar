@@ -7,7 +7,6 @@ pointcloud and heatmap.
 NOTE: Make sure that a calibration stage is applied to the raw ADC data
 before further processing.
 """
-from errno import EILSEQ
 import numpy as np
 
 
@@ -151,7 +150,6 @@ def fft_size(size: int) -> int:
     return 2 ** int(np.ceil(np.log(size) / np.log(2)))
 
 
-
 def get_range_resolution(ns: int, fs: float, fslope,
                         is_adc_filtered: bool = True) -> float:
     """Compute the range resolution of a Radar sensor.
@@ -214,8 +212,7 @@ def get_range_bins(ns: int, fs: float, fslope) -> np.array:
     # Resolution used for rendering
     # Note: Not the actual sensor resolution
     rres = rmax / ns
-    bins = np.arange(0, rmax, rres)
-    return rres * np.arange(ns)
+    return np.arange(0, rmax, rres)
 
 
 def get_velocity_bins(ntx: int, nv: int, fstart: float, tc: float) -> np.array:

@@ -6,7 +6,6 @@ CCRadar: Cascade Chip Radar Sensor
 from typing import Optional
 import os
 import sys
-from time import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -280,7 +279,7 @@ class SCRadar(Lidar):
         return pcl
 
     def _music(self) -> None:
-        """."""
+        """Apply MUSIC algorithm for DoA estimation."""
         # Calibrate raw data
         adc_samples = self.raw
 
@@ -344,58 +343,6 @@ class SCRadar(Lidar):
                     spectrum[hmap_idx],
                 ])
 
-        '''
-        # for vidx in range(nc):
-        for ridx in range(ns):
-            print(f">> {ridx} of {ns}")
-            signal = dfft[:, ridx]
-            # hmap[ridx + vidx * ns, 0] = rbins[ridx]
-            # hmap[ridx + vidx * ns, 1] = vbins[vidx]
-            spectrum[ridx] = np.max(rdsp.music(
-                signal, self.calibration.antenna.txl, self.calibration.antenna.rxl, abins, ebins
-            ))
-        print("Finished!")
-
-        ax = plt.axes(projection="3d")
-        ax.set_title("MUSIC Spectrum")
-        ax.set_xlabel("Elevation")
-        ax.set_ylabel("Azimuth")
-        ax.set_zlabel("Gain")
-        map = ax.scatter(
-            doa[:, 0],
-            doa[:, 1],
-            doa[:, 2],
-            c=doa[:, 2],
-            cmap=plt.cm.get_cmap()
-        )
-        plt.colorbar(map, ax=ax)
-        plt.show()
-
-        # dfft = 10 * np.log10(np.abs(dfft) + 1)
-        # spectrum -= np.mean(spectrum)
-        # spectrum /= np.max(spectrum)
-
-
-        hmap = np.zeros((Na * Ne * ns, 4))
-
-        for eidx in range(Ne):
-            for aidx in range(Na):
-                # for vidx in range(nc):
-                for ridx in range(ns):
-                    hmap_idx: int = ridx + ns * (aidx + Na * eidx)
-                    hmap[hmap_idx] = np.array([
-                        abins[aidx],
-                        rbins[ridx],
-                        ebins[eidx],
-                        spectrum[ridx, eidx, aidx][0],
-                    ])
-        '''
-        # noise_floor: float = -0.2
-        # hmap = hmap[hmap[:, 2] > noise_floor]
-        # Re-Normalise the radar reflection intensity after filtering
-        # hmap[:, 2] -= np.min(hmap[:, 2])
-        # hmap[:, 2] /= np.max(hmap[:, 2])
-
         ax = plt.axes(projection="3d")
         ax.set_title("Test MUSIC")
         ax.set_xlabel("Azimuth")
@@ -410,41 +357,46 @@ class SCRadar(Lidar):
         )
         plt.colorbar(map, ax=ax)
         plt.show()
-        sys.exit(0)
 
+    def _calibrate(self) -> np.array:
+        """Handle the calibration of raw ADC samples.
 
-    def _process_raw_adc(self) -> np.array:
-        """Radar Signal Processing on raw ADC data.
+        Return:
+            Calibrated data based on the radar sensor's type
 
-        FFT Signal processing is applied on the raw Radar ADC samples.
-        As a result, we get the Range, Doppler and Angle estimation of
-        targets detected by the radar.
-
-        Since the number of antenna and device configuration can vary
-        from one board or recording to another,
-        it's good to define a minimum size for the doppler, azimuth, and
-        elevation FFT processing. Let's consider
-
-            (Azimuth) Na: 32 
-            (Elevation) Ne: 16
-
-        This does not affect the resolution of the radar sensor but only
-        the 3D rendeing.
-
-
-        A minimum elevation and azimuth bin size 
-
-        NOTE: The Angle estimation based on FFT doesn't provide high accurary.
-        Thus, more advanced methods like MUSIC or ESPRIT should be implemented.
+        NOTE: Only the casacde chip radar sensor has the frequency and phase
+        calibration
         """
-        self._music()
-        # Calibrate raw data
         adc_samples = self.raw
 
         if self.sensor != "scradar":
             adc_samples *= self.calibration.get_frequency_calibration()
             adc_samples *= self.calibration.get_phase_calibration()
+        return adc_samples
 
+    def _pre_process(self, adc_samples: np.array) -> tuple[np.array, np.array]:
+        """Pre processing of ADC samples.
+
+        The pre-processing step helps in reshaping the data so to match
+        the antenna layout of the radar sensor. Some paddings are also
+        added if required in order to have a minimum of pre-defined
+        frequency bins during FFT processing.
+
+        Since the number of antenna and device configuration can vary
+        from one board or recording to another,
+        it's good to define a minimum size for the doppler, azimuth, and
+        elevation FFT processing (See `config.py` for the default values).
+
+        This does not affect the resolution of the radar sensor but only
+        the 3D rendeing.
+
+        Argument:
+            adc_samples: Calibrated ADC samples
+
+        Return (tuple):
+            virtual_array: 4D data cube ready for FFT processing
+            coulpling_calib: Antenna coupling calibration matrix
+        """
         virtual_array = rdsp.virtual_array(
             adc_samples,
             self.calibration.antenna.txl,
@@ -498,6 +450,29 @@ class SCRadar(Lidar):
             "constant",
             constant_values=((0, 0), (0, 0), (0, 0), (0, 0))
         )
+        return virtual_array, coupling_calib
+
+
+    def _process_raw_adc(self) -> np.array:
+        """Radar Signal Processing on raw ADC data.
+
+        FFT Signal processing is applied on the raw Radar ADC samples.
+        As a result, we get the Range, Doppler and Angle estimation of
+        targets detected by the radar.
+
+        NOTE: The Angle estimation based on FFT doesn't provide high accurary.
+        Thus, more advanced methods like MUSIC or ESPRIT could be implemented.
+        """
+        # Calibrate raw data
+        adc_samples = self._calibrate()
+
+        virtual_array, coupling_calib = self._pre_process(adc_samples)
+
+        # Ne: Number of elevations in the virtual array
+        # Na: Number of azimuth in the virtual array
+        # Nc: Number of chirp per antenna in the virtual array
+        # Ns: Number of samples per chirp
+        Ne, Na, Nc, Ns = virtual_array.shape
 
         # Range-FFT
         # adc_samples *= np.blackman(ns).reshape(1, 1, -1)
@@ -530,58 +505,17 @@ class SCRadar(Lidar):
         Thus, more advanced methods like MUSIC or ESPRIT should be implemented.
         """
         # Calibrate raw data
-        adc_samples = self.raw
-
-        if self.sensor != "scradar":
-            adc_samples *= self.calibration.get_frequency_calibration()
-            adc_samples *= self.calibration.get_phase_calibration()
-
-        virtual_array = rdsp.virtual_array(
-            adc_samples,
-            self.calibration.antenna.txl,
-            self.calibration.antenna.rxl,
-        )
+        adc_samples = self._calibrate()
 
         # Only consider azimuth on elevation 0
+        virtual_array, coupling_calib = self._pre_process(adc_samples)
         virtual_array = np.sum(virtual_array, 0)
-
-        # va_naz: Number of azimuth in the virtual array
-        # va_nc: Number of chirp per antenna in the virtual array
-        # va_ns: Number of samples per chirp
-        va_naz, va_nc, va_ns = virtual_array.shape
-
-        # Estimated size of the azimuth
-        Na = rdsp.fft_size(va_naz)
-        Na = Na if Na > NUMBER_AZIMUTH_BINS_MIN else NUMBER_AZIMUTH_BINS_MIN
-
-        # Size of doppler FFT
-        Nc = rdsp.fft_size(va_nc)
-        Nc = Nc if Nc > NUMBER_DOPPLER_BINS_MIN else NUMBER_DOPPLER_BINS_MIN
-
-        # Size of range FFT
-        Ns = rdsp.fft_size(va_ns)
-        Ns = Ns if Ns > NUMBER_RANGE_BINS_MIN else NUMBER_RANGE_BINS_MIN
-
-        virtual_array *= np.blackman(va_ns).reshape(1, 1, -1)
-        virtual_array = np.pad(
-            virtual_array,
-            ((0, Na - va_naz), (0, Nc - va_nc), (0, Ns - va_ns)),
-            "constant",
-            constant_values=((0, 0), (0, 0), (0, 0))
-        )
-
-        coupling_calib = rdsp.virtual_array(
-            self.calibration.get_coupling_calibration(),
-            self.calibration.antenna.txl,
-            self.calibration.antenna.rxl,
-        )
         coupling_calib = np.sum(coupling_calib, 0)
-        coupling_calib = np.pad(
-            coupling_calib,
-            ((0, Na - va_naz), (0, 0), (0, Ns - va_ns)),
-            "constant",
-            constant_values=((0, 0), (0, 0), (0, 0))
-        )
+
+        # Na: Number of azimuth in the virtual array
+        # Nc: Number of chirp per antenna in the virtual array
+        # Ns: Number of samples per chirp
+        Na, Nc, Ns = virtual_array.shape
 
         # Range-FFT
         # adc_samples *= np.blackman(ns).reshape(1, 1, -1)
@@ -603,8 +537,9 @@ class SCRadar(Lidar):
     def showHeatmapFromRaw(self, threshold: float,
             no_sidelobe: bool = False,
             velocity_view: bool = False,
-            ranges: Optional[tuple[float, float]] = None,
-            azimuths: Optional[tuple[float, float]] = None) -> None:
+            ranges: tuple[Optional[float], Optional[float]] = (None, None),
+            azimuths: tuple[Optional[float], Optional[float]] = (None, None),
+        ) -> None:
         """Render the heatmap processed from the raw radar ADC samples.
 
         Argument:
@@ -622,8 +557,6 @@ class SCRadar(Lidar):
             azimuths (tuple): Min and max value of azimuth to render
                             Format: (min_azimuth, max_azimuth)
         """
-        stime = time()
-
         ntx: int = self.calibration.waveform.num_tx
 
         # ADC sampling frequency
@@ -642,8 +575,6 @@ class SCRadar(Lidar):
         tc: float = self.calibration.waveform.idle_time + te
 
         signal_power = self._process_raw_adc()
-
-        print(f"Processing end time: {time() - stime} s")
 
         # Size of elevation, azimuth, doppler, and range bins
         Ne, Na, Nv, Nr = signal_power.shape
@@ -694,7 +625,6 @@ class SCRadar(Lidar):
                             dpcl[elidx, aidx, vidx, ridx],
                         ])
         '''
-        stime = time()
         hmap[:, 0] = np.repeat(
             [np.repeat(abins, Nv * Nr)],
             Ne, axis=0
@@ -709,8 +639,6 @@ class SCRadar(Lidar):
             Ne, axis=0
         ).reshape(-1)
         hmap[:, 4] = dpcl.reshape(-1)
-
-        print(f"Heatmap building time: {time() - stime} s")
 
         # Filtering ranges
         min_range, max_range = ranges
