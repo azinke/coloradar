@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from core.calibration import Calibration, SCRadarCalibration
-from core.utils.common import error
+from core.utils.common import error, info
 from core.utils import radardsp as rdsp
 from .lidar import Lidar
 
@@ -43,81 +43,76 @@ class SCRadar(Lidar):
         """
         self.sensor: str = self.__class__.__name__.lower()
         self.calibration: SCRadarCalibration = getattr(calib, self.sensor)
+        self.config = config
 
         if self.sensor == "scradar":
             # Read pointcloud
-            filename: str = self._filename(
-                config["paths"][self.sensor]["pointcloud"]["filename_prefix"],
-                index,
-                "bin"
+            self.cld = self._load(
+                index, "pointcloud", np.float32,
+                (-1, self.NUMBER_RECORDING_ATTRIBUTES)
             )
-            self.filepath = os.path.join(
-                config["paths"]["rootdir"],
-                config["paths"][self.sensor]["pointcloud"]["data"],
-                filename
-            )
-            try:
-                cld = np.fromfile(self.filepath, np.float32)
-                self.cld = np.reshape(cld, (-1, self.NUMBER_RECORDING_ATTRIBUTES))
-            except FileNotFoundError:
-                error(f"File '{self.filepath}' not found.")
-                sys.exit(1)
 
         # Read heatmap
-        filename = self._filename(
-            config["paths"][self.sensor]["heatmap"]["filename_prefix"],
-            index,
-            "bin"
-        )
-        self.heatmap_filepath = os.path.join(
-            config["paths"]["rootdir"],
-            config["paths"][self.sensor]["heatmap"]["data"],
-            filename
-        )
-        try:
-            heatmap = np.fromfile(self.heatmap_filepath, np.float32)
-            self.heatmap = np.reshape(
-                heatmap,
-                (
-                    self.calibration.heatmap.num_elevation_bins,
-                    self.calibration.heatmap.num_azimuth_bins,
-                    self.calibration.heatmap.num_range_bins,
-                    2 # Number of value per bin (intensity and location)
-                )
+        self.heatmap = self._load(
+            index, "heatmap", np.float32,
+            (
+                self.calibration.heatmap.num_elevation_bins,
+                self.calibration.heatmap.num_azimuth_bins,
+                self.calibration.heatmap.num_range_bins,
+                2 # Number of value per bin (intensity and location)
             )
-        except FileNotFoundError:
-            error(f"File '{self.heatmap_filepath}' not found.")
-            sys.exit(1)
+        )
 
         # read raw ADC measurements
+        self.raw = None
+        raw = self._load(
+            index, "raw", np.int16,
+            (
+                self.calibration.waveform.num_tx,
+                self.calibration.waveform.num_rx,
+                self.calibration.waveform.num_chirps_per_frame,
+                self.calibration.waveform.num_adc_samples_per_chirp,
+                2 # I and Q signal measurements
+            )
+        )
+        if raw is not None:
+            # s = I + jQ
+            I = np.float16(raw[:, :, :, :, 0])
+            Q = np.float16(raw[:, :, :, :, 1])
+            self.raw = I + 1j * Q
+
+    def _load(self, index: int, ftype: str, dtype: np.dtype,
+              shape: tuple[int, ...]) -> Optional[np.array]:
+        """Load data.
+
+        Arguments:
+            index (int): Index of the datafile to load
+            ftype (str): File type to load. It could be one of the following
+                   values: ('pointcloud', 'heatmap', 'raw')
+            dtype (np.dtype): Data type in the file
+            shape (tuple): The expected shape of the ouput array. The data
+                   will be reshaped based on this parameter
+
+        Return: Data loaded. None if an error occured during the loading
+                process.
+        """
         filename = self._filename(
-            config["paths"][self.sensor]["raw"]["filename_prefix"],
+            self.config["paths"][self.sensor][ftype]["filename_prefix"],
             index,
             "bin"
         )
-        self.raw_meas_filepath = os.path.join(
-            config["paths"]["rootdir"],
-            config["paths"][self.sensor]["raw"]["data"],
+        filepath = os.path.join(
+            self.config["paths"]["rootdir"],
+            self.config["paths"][self.sensor][ftype]["data"],
             filename
         )
         try:
-            raw = np.fromfile(self.raw_meas_filepath, np.int16)
-            # I measurements: raw[::2]
-            # Q measurements: raw[1::2]
-            # s = I + jQ
-            raw = np.float16(raw[::2]) + 1j * np.float16(raw[1::2])
-            self.raw = np.reshape(
-                raw,
-                (
-                    self.calibration.waveform.num_tx,
-                    self.calibration.waveform.num_rx,
-                    self.calibration.waveform.num_chirps_per_frame,
-                    self.calibration.waveform.num_adc_samples_per_chirp,
-                ),
-            )
+            data = np.fromfile(filepath, dtype)
+            data = np.reshape(data, shape)
         except FileNotFoundError:
-            error(f"File '{self.raw_meas_filepath}' not found.")
-            sys.exit(1)
+            error(f"File '{filepath}' not found.")
+            data = None
+        return data
 
     def showHeatmap(self, threshold: float = 0.15, no_sidelobe: bool = False,
                           render: bool = True) -> None:
@@ -129,6 +124,9 @@ class SCRadar(Lidar):
                          in order to avoid side lobes
             render: Flag triggering the rendering of the heatmap when 'true'.
         """
+        if self.heatmap is None:
+            info("No heatmap available!")
+            return None
         ax = plt.axes(projection="3d")
         ax.set_title("Heatmap")
         ax.set_xlabel("Azimuth")
@@ -557,6 +555,9 @@ class SCRadar(Lidar):
             azimuths (tuple): Min and max value of azimuth to render
                             Format: (min_azimuth, max_azimuth)
         """
+        if self.raw is None:
+            info("No raw ADC samples available!")
+            return None
         ntx: int = self.calibration.waveform.num_tx
 
         # ADC sampling frequency
@@ -683,6 +684,9 @@ class SCRadar(Lidar):
             threshold: Threshold value for filtering the heatmap obtained
                        from the radar data processing
         """
+        if self.raw is None:
+            info("No raw ADC samples available!")
+            return None
         # ADC sampling frequency
         fs: float = self.calibration.waveform.adc_sample_frequency
 
