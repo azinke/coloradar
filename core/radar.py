@@ -5,7 +5,6 @@ CCRadar: Cascade Chip Radar Sensor
 """
 from typing import Optional
 import os
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -25,12 +24,19 @@ class SCRadar(Lidar):
 
     Attrinutes:
         NUMBER_RECORDING_ATTRIBUTES: Number of 32-bit integer packed
-        to form a single measurement recording
+            to form a single measurement recording
+        CFAR_WS: Constant False Alarm Rate Window Size
+        CFAR_GC: Constant False Alarm Rate Guard Cell
     """
 
     # The recorded attributes are:
     # x, y, z, I (Intensity of the reflections), Vr (Radial velocity)
     NUMBER_RECORDING_ATTRIBUTES: int = 5
+
+    # CFAR Window size
+    CFAR_WS: int = 16
+    # CFAR guard cell
+    CFAR_GC: int = 8
 
     def __init__(self, config: dict[str, str],
                  calib: Calibration, index: int) -> None:
@@ -580,6 +586,12 @@ class SCRadar(Lidar):
         # Size of elevation, azimuth, doppler, and range bins
         Ne, Na, Nv, Nr = signal_power.shape
 
+        # Noise filering mask
+        sp = np.sum(signal_power, (0, 2))
+        mask = rdsp.nq_cfar_2d(
+            sp, self.CFAR_WS, self.CFAR_GC
+        ).reshape(1, Na, 1, Nr)
+
         # Range bins
         rbins = rdsp.get_range_bins(Nr, fs, fslope)
         # Velocity bins
@@ -592,7 +604,7 @@ class SCRadar(Lidar):
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
 
         dpcl = 10 * np.log10(signal_power + 1)
-        dpcl -= np.abs(np.quantile(dpcl, 0.98, method='weibull'))
+        dpcl *= mask
         dpcl /= np.max(dpcl)
 
         hmap = np.zeros((Ne * Na * Nv * Nr, 5))
@@ -677,13 +689,8 @@ class SCRadar(Lidar):
         plt.colorbar(map, ax=ax)
         plt.show()
 
-    def show2dHeatmap(self, threshold: float) -> None:
-        """Show 2D heatmap.
-
-        Argument:
-            threshold: Threshold value for filtering the heatmap obtained
-                       from the radar data processing
-        """
+    def show2dHeatmap(self) -> None:
+        """Show 2D heatmap."""
         if self.raw is None:
             info("No raw ADC samples available!")
             return None
@@ -698,28 +705,39 @@ class SCRadar(Lidar):
         # Size of elevation, azimuth, doppler, and range bins
         Na, Nv, Nr = signal_power.shape
 
+        # Noise filtering mask
+        sp = np.sum(signal_power, 1)
+        mask = rdsp.nq_cfar_2d(sp, self.CFAR_WS, self.CFAR_GC)
+
         # Range bins
         rbins = rdsp.get_range_bins(Nr, fs, fslope) # np.arange(0, Nr)
         # Azimuth bins
         ares = np.pi / Na
         abins = np.arange(-np.pi/2, np.pi/2, ares) # np.arange(0, Na)
 
-        dpcl = 20 * np.log10(signal_power + 1)
-        dpcl -= np.abs(np.quantile(dpcl, 0.95, method='weibull'))
-        dpcl /= np.max(dpcl)
-        dpcl[dpcl < threshold] = 0.0
-
-        _, ax = plt.subplots()
+        dpcl = np.log10(signal_power + 1)
         dpcl = np.sum(dpcl, 1)
+        dpcl *= mask
+        dpcl /= np.max(dpcl)
         dpcl = np.transpose(dpcl, (1, 0))
+
         az, rg = np.meshgrid(abins, rbins)
+        _, ax = plt.subplots()
         color = ax.pcolormesh(az, rg, dpcl, cmap="CMRmap")
         plt.colorbar(color, ax=ax)
         plt.show()
 
 
 class CCRadar(SCRadar):
-    """Cascade Chip Radar."""
+    """Cascade Chip Radar.
+
+    Attributes:
+        CFAR_WS: Constant False Alarm Rate Window Size
+        CFAR_GC: Constant False Alarm Rate Guard Cell
+    """
+
+    CFAR_WS: int = 32
+    CFAR_GC: int = 16
 
 
     def _phase_calibration(self) -> np.array:

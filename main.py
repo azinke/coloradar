@@ -223,6 +223,11 @@ def main () -> None:
                 info("Bird Eye View closed!")
                 sys.exit(0)
             elif args.raw:
+                info("Processing raw ADC samples ...")
+                if args.heatmap_2d:
+                    info("Rendering 2D heatmap ...")
+                    record.scradar.show2dHeatmap()
+                    sys.exit(0)
                 info("Rendering processed raw radar ADC samples ...")
                 record.scradar.showHeatmapFromRaw(
                     args.threshold,
@@ -267,7 +272,7 @@ def main () -> None:
                 info("Processing raw ADC samples.")
                 if args.heatmap_2d:
                     info("Rendering 2D heatmap ...")
-                    record.ccradar.show2dHeatmap(args.threshold)
+                    record.ccradar.show2dHeatmap()
                     sys.exit(0)
                 info("Rendering 4D heatmap ...")
                 record.ccradar.showHeatmapFromRaw(
