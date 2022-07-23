@@ -8,7 +8,6 @@ NOTE: Make sure that a calibration stage is applied to the raw ADC data
 before further processing.
 """
 import numpy as np
-from scipy.fft import rfft
 
 
 # Speed of light

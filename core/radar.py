@@ -224,6 +224,30 @@ class SCRadar(Lidar):
         point[2] = r_idx * _range_bin_width * np.sin(_el_bin)
         return point
 
+    def _to_cartesian(self, hmap: np.array) -> np.array:
+        """Convert polar coordinate heatmap to catesian coordinate.
+
+        Argument:
+            hmap: The heatmap of shape (-1, 5)
+                  Structure (columns):
+                    [0]: Azimuth
+                    [1]: Range
+                    [2]: Elevation
+                    [3]: Velocity
+                    [4]: Intensity of reflection in dB
+
+                @see: showHeatmapFromRaw
+
+        Example:
+            self._to_cartesian(hmap)
+        """
+        pcld = np.zeros(hmap.shape)
+        pcld[:, 0] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.cos(hmap[:, 0])
+        pcld[:, 1] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.sin(hmap[:, 0])
+        pcld[:, 2] = hmap[:, 1] * np.sin(hmap[:, 2])
+        pcld[:, 3:] = hmap[:, 3:]
+        return pcld
+
     def _heatmap_to_pointcloud(self, threshold: float = 0.15,
                                      no_sidelobe: bool = False) -> np.array:
         """Compute pointcloud from heatmap.
