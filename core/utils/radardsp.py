@@ -8,6 +8,7 @@ NOTE: Make sure that a calibration stage is applied to the raw ADC data
 before further processing.
 """
 import numpy as np
+from scipy.fft import rfft
 
 
 # Speed of light
@@ -261,7 +262,6 @@ def os_cfar(samples: np.array, ws: int, ngc: int = 2, tos: int = 8) -> np.array:
     """
     ns: int = len(samples)
     k: int = int(3.0 * ws/4.0)
-    samples = np.square(np.abs(samples))
 
     # Add leading and trailing zeros into order to run the algorithm over
     # the entire samples

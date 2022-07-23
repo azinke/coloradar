@@ -586,10 +586,24 @@ class SCRadar(Lidar):
         # Size of elevation, azimuth, doppler, and range bins
         Ne, Na, Nv, Nr = signal_power.shape
 
-        # Noise filering mask
+        #
+        # Noise filering masks
+        #
+
+        # Doppler Non-coherent integration
+        sp = np.sum(signal_power, (0, 1, 3))
+        dmask = rdsp.os_cfar(
+            sp,
+            self.CFAR_WS//2,
+            self.CFAR_GC//2
+        ).reshape(1, 1, Nv, 1)
+
+        # Non-coherent integration with Azimuth-Range 2D noise filtering
         sp = np.sum(signal_power, (0, 2))
-        mask = rdsp.nq_cfar_2d(
-            sp, self.CFAR_WS, self.CFAR_GC
+        rmask = rdsp.nq_cfar_2d(
+            sp,
+            self.CFAR_WS,
+            self.CFAR_GC
         ).reshape(1, Na, 1, Nr)
 
         # Range bins
@@ -604,7 +618,7 @@ class SCRadar(Lidar):
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
 
         dpcl = 10 * np.log10(signal_power + 1)
-        dpcl *= mask
+        dpcl *= dmask * rmask
         dpcl /= np.max(dpcl)
 
         hmap = np.zeros((Ne * Na * Nv * Nr, 5))
