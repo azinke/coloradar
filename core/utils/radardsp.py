@@ -53,7 +53,7 @@ def music(signal: np.array, txl: np.array, rxl: np.array,
         el_bins: Elevation bins
     """
     # Number of targets expected
-    T: int = 100
+    T: int = 1
 
     N = len(signal)
     signal = np.asmatrix(signal)
@@ -261,7 +261,6 @@ def os_cfar(samples: np.array, ws: int, ngc: int = 2, tos: int = 8) -> np.array:
     """
     ns: int = len(samples)
     k: int = int(3.0 * ws/4.0)
-    samples = np.square(np.abs(samples))
 
     # Add leading and trailing zeros into order to run the algorithm over
     # the entire samples

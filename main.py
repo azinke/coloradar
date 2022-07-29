@@ -162,6 +162,13 @@ def main () -> None:
         type=float,
         default=None
     )
+    parser.add_argument(
+        "--polar",
+        help="Render heatmap in polar coordinate. "
+        "Carterian coordinate is used by default otherwise",
+        action="store_true",
+        default=False
+    )
 
     args = parser.parse_args()
 
@@ -233,6 +240,7 @@ def main () -> None:
                     args.threshold,
                     args.no_sidelobe,
                     args.velocity_view,
+                    args.polar,
                     (args.min_range, args.max_range),
                     (args.min_azimuth, args.max_azimuth),
                 )
@@ -272,13 +280,14 @@ def main () -> None:
                 info("Processing raw ADC samples.")
                 if args.heatmap_2d:
                     info("Rendering 2D heatmap ...")
-                    record.ccradar.show2dHeatmap()
+                    record.ccradar.show2dHeatmap(args.polar)
                     sys.exit(0)
                 info("Rendering 4D heatmap ...")
                 record.ccradar.showHeatmapFromRaw(
                     args.threshold,
                     args.no_sidelobe,
                     args.velocity_view,
+                    args.polar,
                     (args.min_range, args.max_range),
                     (args.min_azimuth, args.max_azimuth),
                 )

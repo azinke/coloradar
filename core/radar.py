@@ -50,6 +50,7 @@ class SCRadar(Lidar):
         self.sensor: str = self.__class__.__name__.lower()
         self.calibration: SCRadarCalibration = getattr(calib, self.sensor)
         self.config = config
+        self.index = index
 
         if self.sensor == "scradar":
             # Read pointcloud
@@ -224,6 +225,30 @@ class SCRadar(Lidar):
         point[2] = r_idx * _range_bin_width * np.sin(_el_bin)
         return point
 
+    def _to_cartesian(self, hmap: np.array) -> np.array:
+        """Convert polar coordinate heatmap to catesian coordinate.
+
+        Argument:
+            hmap: The heatmap of shape (-1, 5)
+                  Structure (columns):
+                    [0]: Azimuth
+                    [1]: Range
+                    [2]: Elevation
+                    [3]: Velocity
+                    [4]: Intensity of reflection in dB
+
+                @see: showHeatmapFromRaw
+
+        Example:
+            self._to_cartesian(hmap)
+        """
+        pcld = np.zeros(hmap.shape)
+        pcld[:, 0] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.cos(hmap[:, 0])
+        pcld[:, 1] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.sin(hmap[:, 0])
+        pcld[:, 2] = hmap[:, 1] * np.sin(hmap[:, 2])
+        pcld[:, 3:] = hmap[:, 3:]
+        return pcld
+
     def _heatmap_to_pointcloud(self, threshold: float = 0.15,
                                      no_sidelobe: bool = False) -> np.array:
         """Compute pointcloud from heatmap.
@@ -302,8 +327,8 @@ class SCRadar(Lidar):
         # Chirp time
         tc: float = self.calibration.waveform.idle_time + te
 
-        Na = 32
-        Ne = 32
+        Na = 64
+        Ne = 64
 
         if self.sensor != "scradar":
             adc_samples *= self.calibration.get_frequency_calibration()
@@ -336,6 +361,7 @@ class SCRadar(Lidar):
         spectrum = rdsp.music(
             signal, self.calibration.antenna.txl, self.calibration.antenna.rxl, abins, ebins
         )
+        '''
         hmap = np.zeros((Na * Ne, 3))
 
         for eidx in range(Ne):
@@ -346,12 +372,18 @@ class SCRadar(Lidar):
                     ebins[eidx],
                     spectrum[hmap_idx],
                 ])
+        '''
 
-        ax = plt.axes(projection="3d")
+        # ax = plt.axes(projection="3d")
+        fig = plt.figure()
+        ax = fig.gca(projection="3d")
+        # _, ax = plt.subplots(subplot_kw={"projection": "3d"})
         ax.set_title("Test MUSIC")
         ax.set_xlabel("Azimuth")
         ax.set_ylabel("Elevation")
         ax.set_zlabel("Gain")
+        el, az = np.meshgrid(ebins, abins)
+        '''
         map = ax.scatter(
             hmap[:, 0],
             hmap[:, 1],
@@ -359,7 +391,17 @@ class SCRadar(Lidar):
             c=hmap[:, 2],
             cmap=plt.cm.get_cmap()
         )
-        plt.colorbar(map, ax=ax)
+        '''
+        surf = ax.plot_surface(
+            el, az, spectrum.reshape(Ne, Na),
+            cmap="coolwarm",
+            rstride=1,
+            cstride=1,
+            alpha=None,
+            # linewidth=0,
+            # antialiased=False
+        )
+        plt.colorbar(surf, shrink=0.5, aspect=1)
         plt.show()
 
     def _calibrate(self) -> np.array:
@@ -541,6 +583,7 @@ class SCRadar(Lidar):
     def showHeatmapFromRaw(self, threshold: float,
             no_sidelobe: bool = False,
             velocity_view: bool = False,
+            polar: bool = False,
             ranges: tuple[Optional[float], Optional[float]] = (None, None),
             azimuths: tuple[Optional[float], Optional[float]] = (None, None),
         ) -> None:
@@ -556,6 +599,9 @@ class SCRadar(Lidar):
             velocity_view: Render the heatmap using the velocity as the fourth
                            dimension. When false, the signal gain in dB is used
                            instead.
+            polar (bool): Flag to indicate that the pointcloud should be rendered
+                          directly in the polar coordinate. When false, the
+                          heatmap is converted into the cartesian coordinate
             ranges (tuple): Min and max value of the range to render
                             Format: (min_range, max_range)
             azimuths (tuple): Min and max value of azimuth to render
@@ -586,10 +632,24 @@ class SCRadar(Lidar):
         # Size of elevation, azimuth, doppler, and range bins
         Ne, Na, Nv, Nr = signal_power.shape
 
-        # Noise filering mask
+        #
+        # Noise filering masks
+        #
+
+        # Doppler Non-coherent integration
+        sp = np.sum(signal_power, (0, 1, 3))
+        dmask = rdsp.os_cfar(
+            sp,
+            self.CFAR_WS//2,
+            self.CFAR_GC//2
+        ).reshape(1, 1, Nv, 1)
+
+        # Non-coherent integration with Azimuth-Range 2D noise filtering
         sp = np.sum(signal_power, (0, 2))
-        mask = rdsp.nq_cfar_2d(
-            sp, self.CFAR_WS, self.CFAR_GC
+        rmask = rdsp.nq_cfar_2d(
+            sp,
+            self.CFAR_WS,
+            self.CFAR_GC
         ).reshape(1, Na, 1, Nr)
 
         # Range bins
@@ -604,7 +664,7 @@ class SCRadar(Lidar):
         ebins = np.arange(-np.pi/2, np.pi/2, eres)
 
         dpcl = 10 * np.log10(signal_power + 1)
-        dpcl *= mask
+        dpcl *= dmask * rmask
         dpcl /= np.max(dpcl)
 
         hmap = np.zeros((Ne * Na * Nv * Nr, 5))
@@ -674,6 +734,11 @@ class SCRadar(Lidar):
         hmap[:, 4] -= np.min(hmap[:, 4])
         hmap[:, 4] /= np.max(hmap[:, 4])
 
+        if not polar:
+            hmap = self._to_cartesian(hmap)
+            # Swap range and azimuth axis
+            hmap = hmap[:, (1, 0, 2, 3, 4)]
+
         ax = plt.axes(projection="3d")
         ax.set_title("4D-FFT processing of raw ADC samples")
         ax.set_xlabel("Azimuth")
@@ -689,8 +754,14 @@ class SCRadar(Lidar):
         plt.colorbar(map, ax=ax)
         plt.show()
 
-    def show2dHeatmap(self) -> None:
-        """Show 2D heatmap."""
+    def show2dHeatmap(self, polar: bool = False) -> None:
+        """Show 2D heatmap.
+
+        Argument:
+            polar: Flag to indicate that the pointcloud should be rendered
+                   directly in the polar coordinate. When false, the
+                   heatmap is converted into the cartesian coordinate
+        """
         if self.raw is None:
             info("No raw ADC samples available!")
             return None
@@ -715,16 +786,40 @@ class SCRadar(Lidar):
         ares = np.pi / Na
         abins = np.arange(-np.pi/2, np.pi/2, ares) # np.arange(0, Na)
 
-        dpcl = np.log10(signal_power + 1)
+        dpcl = np.log10(signal_power)
         dpcl = np.sum(dpcl, 1)
         dpcl *= mask
         dpcl /= np.max(dpcl)
-        dpcl = np.transpose(dpcl, (1, 0))
 
-        az, rg = np.meshgrid(abins, rbins)
-        _, ax = plt.subplots()
-        color = ax.pcolormesh(az, rg, dpcl, cmap="CMRmap")
-        plt.colorbar(color, ax=ax)
+        if not polar:
+            hmap = np.zeros((Na * Nr, 3))
+
+            for aidx, _az in enumerate(abins):
+                for ridx, _r in enumerate(rbins):
+                    hmap[ridx + Nr * aidx] = np.array([
+                        _r * np.sin(_az),   # Azimuth
+                        _r * np.cos(_az),   # Range
+                        dpcl[aidx, ridx],
+                    ])
+
+            ax = plt.axes()
+            ax.scatter(
+                hmap[:, 0],
+                hmap[:, 1],
+                hmap[:, 2],
+                c=hmap[:, 2],
+            )
+            ax.set_xlabel("Azimuth (m)")
+            ax.set(facecolor="black")
+        else:
+            dpcl = np.transpose(dpcl, (1, 0))
+            az, rg = np.meshgrid(abins, rbins)
+            _, ax = plt.subplots()
+            color = ax.pcolormesh(az, rg, dpcl, cmap="viridis")
+            ax.set_xlabel("Azimuth (rad)")
+
+        ax.set_ylabel("Range (m)")
+        ax.set_title(f"Frame {self.index:04}")
         plt.show()
 
 
