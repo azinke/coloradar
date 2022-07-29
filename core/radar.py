@@ -7,7 +7,6 @@ from typing import Optional
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import interpolate
 
 from core.calibration import Calibration, SCRadarCalibration
 from core.utils.common import error, info
@@ -51,6 +50,7 @@ class SCRadar(Lidar):
         self.sensor: str = self.__class__.__name__.lower()
         self.calibration: SCRadarCalibration = getattr(calib, self.sensor)
         self.config = config
+        self.index = index
 
         if self.sensor == "scradar":
             # Read pointcloud
@@ -583,6 +583,7 @@ class SCRadar(Lidar):
     def showHeatmapFromRaw(self, threshold: float,
             no_sidelobe: bool = False,
             velocity_view: bool = False,
+            polar: bool = False,
             ranges: tuple[Optional[float], Optional[float]] = (None, None),
             azimuths: tuple[Optional[float], Optional[float]] = (None, None),
         ) -> None:
@@ -598,6 +599,9 @@ class SCRadar(Lidar):
             velocity_view: Render the heatmap using the velocity as the fourth
                            dimension. When false, the signal gain in dB is used
                            instead.
+            polar (bool): Flag to indicate that the pointcloud should be rendered
+                          directly in the polar coordinate. When false, the
+                          heatmap is converted into the cartesian coordinate
             ranges (tuple): Min and max value of the range to render
                             Format: (min_range, max_range)
             azimuths (tuple): Min and max value of azimuth to render
@@ -730,6 +734,11 @@ class SCRadar(Lidar):
         hmap[:, 4] -= np.min(hmap[:, 4])
         hmap[:, 4] /= np.max(hmap[:, 4])
 
+        if not polar:
+            hmap = self._to_cartesian(hmap)
+            # Swap range and azimuth axis
+            hmap = hmap[:, (1, 0, 2, 3, 4)]
+
         ax = plt.axes(projection="3d")
         ax.set_title("4D-FFT processing of raw ADC samples")
         ax.set_xlabel("Azimuth")
@@ -745,8 +754,14 @@ class SCRadar(Lidar):
         plt.colorbar(map, ax=ax)
         plt.show()
 
-    def show2dHeatmap(self) -> None:
-        """Show 2D heatmap."""
+    def show2dHeatmap(self, polar: bool = False) -> None:
+        """Show 2D heatmap.
+
+        Argument:
+            polar: Flag to indicate that the pointcloud should be rendered
+                   directly in the polar coordinate. When false, the
+                   heatmap is converted into the cartesian coordinate
+        """
         if self.raw is None:
             info("No raw ADC samples available!")
             return None
@@ -771,16 +786,40 @@ class SCRadar(Lidar):
         ares = np.pi / Na
         abins = np.arange(-np.pi/2, np.pi/2, ares) # np.arange(0, Na)
 
-        dpcl = np.log10(signal_power + 1)
+        dpcl = np.log10(signal_power)
         dpcl = np.sum(dpcl, 1)
         dpcl *= mask
         dpcl /= np.max(dpcl)
-        dpcl = np.transpose(dpcl, (1, 0))
 
-        az, rg = np.meshgrid(abins, rbins)
-        _, ax = plt.subplots()
-        color = ax.pcolormesh(az, rg, dpcl, cmap="CMRmap")
-        plt.colorbar(color, ax=ax)
+        if not polar:
+            hmap = np.zeros((Na * Nr, 3))
+
+            for aidx, _az in enumerate(abins):
+                for ridx, _r in enumerate(rbins):
+                    hmap[ridx + Nr * aidx] = np.array([
+                        _r * np.sin(_az),   # Azimuth
+                        _r * np.cos(_az),   # Range
+                        dpcl[aidx, ridx],
+                    ])
+
+            ax = plt.axes()
+            ax.scatter(
+                hmap[:, 0],
+                hmap[:, 1],
+                hmap[:, 2],
+                c=hmap[:, 2],
+            )
+            ax.set_xlabel("Azimuth (m)")
+            ax.set(facecolor="black")
+        else:
+            dpcl = np.transpose(dpcl, (1, 0))
+            az, rg = np.meshgrid(abins, rbins)
+            _, ax = plt.subplots()
+            color = ax.pcolormesh(az, rg, dpcl, cmap="viridis")
+            ax.set_xlabel("Azimuth (rad)")
+
+        ax.set_ylabel("Range (m)")
+        ax.set_title(f"Frame {self.index:04}")
         plt.show()
 
 
