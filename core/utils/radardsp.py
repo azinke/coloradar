@@ -53,7 +53,7 @@ def music(signal: np.array, txl: np.array, rxl: np.array,
         el_bins: Elevation bins
     """
     # Number of targets expected
-    T: int = 100
+    T: int = 1
 
     N = len(signal)
     signal = np.asmatrix(signal)

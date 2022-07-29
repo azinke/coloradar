@@ -7,6 +7,7 @@ from typing import Optional
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import interpolate
 
 from core.calibration import Calibration, SCRadarCalibration
 from core.utils.common import error, info
@@ -326,8 +327,8 @@ class SCRadar(Lidar):
         # Chirp time
         tc: float = self.calibration.waveform.idle_time + te
 
-        Na = 32
-        Ne = 32
+        Na = 64
+        Ne = 64
 
         if self.sensor != "scradar":
             adc_samples *= self.calibration.get_frequency_calibration()
@@ -360,6 +361,7 @@ class SCRadar(Lidar):
         spectrum = rdsp.music(
             signal, self.calibration.antenna.txl, self.calibration.antenna.rxl, abins, ebins
         )
+        '''
         hmap = np.zeros((Na * Ne, 3))
 
         for eidx in range(Ne):
@@ -370,12 +372,18 @@ class SCRadar(Lidar):
                     ebins[eidx],
                     spectrum[hmap_idx],
                 ])
+        '''
 
-        ax = plt.axes(projection="3d")
+        # ax = plt.axes(projection="3d")
+        fig = plt.figure()
+        ax = fig.gca(projection="3d")
+        # _, ax = plt.subplots(subplot_kw={"projection": "3d"})
         ax.set_title("Test MUSIC")
         ax.set_xlabel("Azimuth")
         ax.set_ylabel("Elevation")
         ax.set_zlabel("Gain")
+        el, az = np.meshgrid(ebins, abins)
+        '''
         map = ax.scatter(
             hmap[:, 0],
             hmap[:, 1],
@@ -383,7 +391,17 @@ class SCRadar(Lidar):
             c=hmap[:, 2],
             cmap=plt.cm.get_cmap()
         )
-        plt.colorbar(map, ax=ax)
+        '''
+        surf = ax.plot_surface(
+            el, az, spectrum.reshape(Ne, Na),
+            cmap="coolwarm",
+            rstride=1,
+            cstride=1,
+            alpha=None,
+            # linewidth=0,
+            # antialiased=False
+        )
+        plt.colorbar(surf, shrink=0.5, aspect=1)
         plt.show()
 
     def _calibrate(self) -> np.array:
