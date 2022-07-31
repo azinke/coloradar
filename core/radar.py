@@ -586,6 +586,7 @@ class SCRadar(Lidar):
             polar: bool = False,
             ranges: tuple[Optional[float], Optional[float]] = (None, None),
             azimuths: tuple[Optional[float], Optional[float]] = (None, None),
+            **kwargs,
         ) -> None:
         """Render the heatmap processed from the raw radar ADC samples.
 
@@ -606,6 +607,8 @@ class SCRadar(Lidar):
                             Format: (min_range, max_range)
             azimuths (tuple): Min and max value of azimuth to render
                             Format: (min_azimuth, max_azimuth)
+            kwargs (dict): Optional keyword arguments
+                    "show": When false, prevent the rendered heatmap to be shown
         """
         if self.raw is None:
             info("No raw ADC samples available!")
@@ -744,23 +747,32 @@ class SCRadar(Lidar):
         ax.set_xlabel("Azimuth")
         ax.set_ylabel("Range")
         ax.set_zlabel("Elevation")
+        if polar:
+            ax.set_xlim(np.min(abins), np.max(abins))
+        else:
+            ax.set_xlim(-np.max(rbins), np.max(rbins))
+        ax.set_ylim(np.min(rbins), np.max(rbins))
+        ax.view_init(azim=-30, elev=45)
         map = ax.scatter(
             hmap[:, 0],
             hmap[:, 1],
             hmap[:, 2],
             c=hmap[:, 3] if velocity_view else hmap[:, 4],
-            cmap=plt.cm.get_cmap()
+            cmap=plt.cm.get_cmap(),
+            s=5.0, # Marker size
         )
         plt.colorbar(map, ax=ax)
-        plt.show()
+        if kwargs.get("show", True):
+            plt.show()
 
-    def show2dHeatmap(self, polar: bool = False) -> None:
-        """Show 2D heatmap.
+    def show2dHeatmap(self, polar: bool = False, show: bool = True) -> None:
+        """Render 2D heatmap.
 
         Argument:
             polar: Flag to indicate that the pointcloud should be rendered
                    directly in the polar coordinate. When false, the
                    heatmap is converted into the cartesian coordinate
+            show: Enable the rendered figure to be shown.
         """
         if self.raw is None:
             info("No raw ADC samples available!")
@@ -820,7 +832,8 @@ class SCRadar(Lidar):
 
         ax.set_ylabel("Range (m)")
         ax.set_title(f"Frame {self.index:04}")
-        plt.show()
+        if show:
+            plt.show()
 
 
 class CCRadar(SCRadar):

@@ -7,3 +7,6 @@ venv
 # Dataset folder expect the dataset entry point
 dataset/*
 !dataset/*.json
+
+# Output folder for generated artifacts (images, etc.)
+output
