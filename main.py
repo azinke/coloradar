@@ -2,6 +2,8 @@
 import sys
 import argparse
 
+import matplotlib
+matplotlib.use("WebAgg")
 import matplotlib.pyplot as plt
 
 from core.dataset import Coloradar
@@ -169,6 +171,18 @@ def main () -> None:
         action="store_true",
         default=False
     )
+    parser.add_argument(
+        "--save-to",
+        help="Destination folder to save the processed data to.",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--animate",
+        help="Folder to read input images from",
+        type=str,
+        default=None,
+    )
 
     args = parser.parse_args()
 
@@ -294,6 +308,44 @@ def main () -> None:
                 success("Successfully closed!")
                 sys.exit(0)
 
+    elif args.dataset and args.save_to:
+        record = coloradar.getRecord(args.dataset, 0)
+        if args.lidar:
+            info(f"Generated batches of lidar heatmap from '{args.dataset}'")
+            record.process_and_save(
+                "lidar",
+                resolution=args.resolution,
+                srange=(-args.width/2, args.width/2),
+                frange=(-args.height/2, args.height/2),
+                output=args.save_to,
+            )
+            success("BEV generated with success!")
+            sys.exit(0)
+        elif args.ccradar and args.raw:
+            info(f"Generating batches of radar heatmap from '{args.dataset}'")
+            if args.heatmap_2d:
+                record.process_and_save(
+                    "ccradar",
+                    output=args.save_to,
+                )
+                success("Radar 2D heatmap generated with success!")
+                sys.exit(0)
+            record.process_and_save(
+                "ccradar",
+                output=args.save_to,
+                threshold=args.threshold,
+                no_sidelobe=args.no_sidelobe,
+                velocity_view=args.velocity_view,
+                heatmap_3d=True,
+            )
+            success("Radar 3D heatmap generated with success!")
+            sys.exit(0)
+
+    elif args.dataset and args.animate:
+        record = coloradar.getRecord(args.dataset, 0)
+        record.make_video(args.animate)
+        success("Animation generated with success!")
+        sys.exit(0)
     parser.print_help()
     sys.exit(0)
 
