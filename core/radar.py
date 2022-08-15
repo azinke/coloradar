@@ -3,6 +3,7 @@
 SCRadar: Single Chip Radar Sensor
 CCRadar: Cascade Chip Radar Sensor
 """
+from optparse import Option
 from typing import Optional
 import os
 import numpy as np
@@ -418,10 +419,118 @@ class SCRadar(Lidar):
         """
         adc_samples = self.raw
 
+        # Remove DC bias
+        adc_samples -= np.mean(adc_samples)
+
         if self.sensor != "scradar":
             adc_samples *= self.calibration.get_frequency_calibration()
             adc_samples *= self.calibration.get_phase_calibration()
         return adc_samples
+
+    def _get_fft_size(self, ne: Optional[int], na: Optional[int],
+             nc: Optional[int], ns: Optional[int]) -> tuple[int, int, int, int]:
+        """Get optimal FFT size.
+
+        Arguments:
+            ne: Size of the elevation axis of the data cube
+            na: Size of the azimuth axis of the data cube
+            nc: Number of chirp loops
+            ns: Number of samples per chirp
+
+        Return:
+            Tuple of the optimal size of each parameter provided in argument
+            in the exact same order.
+        """
+        # Estimated size of the elevation and azimuth
+        if ne is not None:
+            ne = rdsp.fft_size(ne)
+            ne = (
+                ne if ne > NUMBER_ELEVATION_BINS_MIN else NUMBER_ELEVATION_BINS_MIN
+            )
+
+        if na is not None:
+            na = rdsp.fft_size(na)
+            na = na if na > NUMBER_AZIMUTH_BINS_MIN else NUMBER_AZIMUTH_BINS_MIN
+
+        if nc is not None:
+            # Size of doppler FFT
+            nc = rdsp.fft_size(nc)
+            nc = nc if nc > NUMBER_DOPPLER_BINS_MIN else NUMBER_DOPPLER_BINS_MIN
+        if ns is not None:
+            # Size of range FFT
+            ns = rdsp.fft_size(ns)
+            ns = ns if ns > NUMBER_RANGE_BINS_MIN else NUMBER_RANGE_BINS_MIN
+
+        return ne, na, nc, ns
+
+    def _get_bins(self, ns: Optional[int], nc: Optional[int], na: Optional[int],
+            ne: Optional[int]) ->tuple[np.array, np.array, np.array, np.array]:
+        """Return the range, velocity, azimuth and elevation bins.
+
+        Arguments:
+            ne: Elevation FFT size
+            na: Azimuth FFT size
+            nc: Doppler FFT size
+            ns: Range FFT size
+
+        Return:
+            range bins
+            velocity bins
+            azimuth bins
+            elevation bins
+
+        NOTE: The bins are returned in the order listed above
+        """
+        # Number of TX antenna
+        ntx: int = self.calibration.antenna.num_tx
+
+        # ADC sampling frequency
+        fs: float = self.calibration.waveform.adc_sample_frequency
+
+        # Frequency slope
+        fslope: float = self.calibration.waveform.frequency_slope
+
+        # Start frequency
+        fstart: float = self.calibration.waveform.start_frequency
+
+        # Ramp end time
+        te: float = self.calibration.waveform.ramp_end_time
+
+        # Chirp time
+        tc: float = self.calibration.waveform.idle_time + te
+
+        rbins = np.array([])        # Range bins
+        vbins = np.array([])        # Doppler bins
+        abins = np.array([])        # Azimuth bins
+        ebins = np.array([])        # Elevation bins
+
+        if ns:
+            rbins = rdsp.get_range_bins(ns, fs, fslope)
+
+        if nc:
+            # Velocity bins
+            vbins = rdsp.get_velocity_bins(ntx, nc, fstart, tc)
+
+        if na:
+            # Azimuth bins
+            ares = 2 * self.AZIMUTH_FOV / na
+            # Estimate azimuth angles and flip the azimuth axis
+            abins = -1 * np.arcsin(
+                np.arange(-self.AZIMUTH_FOV, self.AZIMUTH_FOV, ares) / (
+                    2 * np.pi * self.calibration.d
+                )
+            )
+
+        if ne:
+            # Elevation
+            eres = 2 * self.ELEVATION_FOV / ne
+            # Estimate elevation angles and flip the elevation axis
+            ebins = -1 * np.arcsin(
+                np.arange(-self.ELEVATION_FOV, self.ELEVATION_FOV, eres) / (
+                    2 * np.pi * self.calibration.d
+                )
+            )
+        return rbins, vbins, abins, ebins
 
     def _pre_process(self, adc_samples: np.array) -> tuple[np.array, np.array]:
         """Pre processing of ADC samples.
@@ -458,21 +567,7 @@ class SCRadar(Lidar):
         # va_ns: Number of samples per chirp
         va_nel, va_naz, va_nc, va_ns = virtual_array.shape
 
-        # Estimated size of the elevation and azimuth
-        Ne = rdsp.fft_size(va_nel)
-        Na = rdsp.fft_size(va_naz)
-        Na = Na if Na > NUMBER_AZIMUTH_BINS_MIN else NUMBER_AZIMUTH_BINS_MIN
-        Ne = (
-            Ne if Ne > NUMBER_ELEVATION_BINS_MIN else NUMBER_ELEVATION_BINS_MIN
-        )
-
-        # Size of doppler FFT
-        Nc = rdsp.fft_size(va_nc)
-        Nc = Nc if Nc > NUMBER_DOPPLER_BINS_MIN else NUMBER_DOPPLER_BINS_MIN
-
-        # Size of range FFT
-        Ns = rdsp.fft_size(va_ns)
-        Ns = Ns if Ns > NUMBER_RANGE_BINS_MIN else NUMBER_RANGE_BINS_MIN
+        Ne, Na, Nc, Ns = self._get_fft_size(*virtual_array.shape)
 
         virtual_array *= np.blackman(va_ns).reshape(1, 1, 1, -1)
         virtual_array = np.pad(
@@ -542,6 +637,129 @@ class SCRadar(Lidar):
 
         # Return the signal power
         return np.abs(afft) ** 2
+
+    def _generate_radar_pcl(self) -> np.array:
+        """Generate point cloud."""
+        # Calibrate raw data
+        adc_samples = self._calibrate()
+
+        # virtual_array, coupling_calib = self._pre_process(adc_samples)
+
+        # ntx: Number of TX antenna
+        # nrx: Number of RX antenna
+        # nc: Number of chirp per antenna in the virtual array
+        # ns: Number of samples per chirp
+        ntx, nrx, nc, ns = adc_samples.shape
+
+        rsignal = np.zeros((ntx, nrx, nc, ns), dtype=np.complex64)
+
+        for tidx in range(ntx):
+            for ridx in range(nrx):
+                samples = adc_samples[tidx, ridx, :, :]
+                samples *= np.blackman(ns).reshape(1, -1)
+                rfft = np.fft.fft(samples, ns, -1)
+                rfft = rfft - self.calibration.get_coupling_calibration()[tidx, ridx, :, :]
+
+                # Doppler-FFT
+                dfft = np.fft.fft(rfft, nc, -2)
+                # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
+                dfft = np.fft.fftshift(dfft, -2)
+
+                rsignal[tidx, ridx, :, :] = dfft
+
+        mimo_dfft = rsignal.reshape(ntx * nrx, nc, ns)
+        mimo_dfft = np.sum(np.abs(mimo_dfft) ** 2, 0)
+
+        # OS-CFAR for object detection
+        _, detections = rdsp.nq_cfar_2d(mimo_dfft, 8, 2)
+
+        # Restructure data based on the virtual antenna
+        va = rdsp.virtual_array(
+            rsignal,
+            self.calibration.antenna.txl,
+            self.calibration.antenna.rxl
+        )
+
+        # Optional FFT size respectively for the elevation, azimuth,
+        # doppler and range axis
+        Ne, Na, Nc, Ns = self._get_fft_size(*va.shape)
+
+        # Range, doppler, azimuth and elevation bins
+        rbins, vbins, abins, ebins = self._get_bins(Ns, Nc, Na, Ne)
+
+        # Azimuth estimation
+        afft = np.fft.fft(va, Na, 1)
+        afft = np.fft.fftshift(afft, 1)
+
+        # Elevation esitamtion
+        efft = np.fft.fft(afft, Ne, 0)
+        efft = np.fft.fftshift(efft, 0)
+
+        pcl = np.zeros((len(detections), 5))
+
+        for idx, obj in enumerate(detections):
+            #Azimuth estimation
+            _az = np.argmax(np.sum(afft[:, :, obj.vidx, obj.ridx], 0))
+            obj.aidx = _az
+
+            # Elevation estimation
+            _el = np.argmax(efft[:, _az, obj.vidx, obj.ridx])
+            obj.eidx = _el
+
+            pcl[idx] = np.array([
+                abins[obj.aidx],            # Azimnuth
+                rbins[obj.ridx],            # Range
+                ebins[obj.eidx],            # Elevation
+                vbins[obj.vidx],            # Velocity
+                10 * np.log10(obj.snr)      # SNR
+            ])
+        return pcl
+
+    def showPointcloudFromRaw(self,
+            velocity_view: bool = False,
+            bird_eye_view: bool = False, polar: bool = False, **kwargs) -> None:
+        """Render pointcloud of detected object from radar signal processing.
+
+        Arguments:
+            bird_eye_view: Enable 2D Bird Eye View rendering
+        """
+        pcl = self._generate_radar_pcl()
+        # Remove very close range
+        pcl = pcl[pcl[:, 1] >= 1.0]
+        if not polar:
+            pcl = self._to_cartesian(pcl)
+            pcl = pcl[:, (1, 0, 2, 3, 4)]  # swap range and azimuth
+        if bird_eye_view:
+            ax = plt.axes()
+            ax.set_title("Radar Bird Eye View")
+            ax.scatter(
+                pcl[:, 0],
+                pcl[:, 1],
+                pcl[:, 4],
+                c=pcl[:, 4],
+                cmap="viridis",
+            )
+            ax.set_xlabel("Azimuth (m)")
+            ax.set(facecolor="black")
+        else:
+            ax = plt.axes(projection="3d")
+            ax.set_title("4D-FFT processing of raw ADC samples")
+            ax.set_zlabel("Elevation")
+            map = ax.scatter(
+                pcl[:, 0],
+                pcl[:, 1],
+                pcl[:, 2],
+                c=pcl[:, 3] if velocity_view else pcl[:, 4],
+                cmap=plt.cm.get_cmap(),
+                s=5.0, # Marker size
+            )
+            plt.colorbar(map, ax=ax)
+
+        ax.set_xlabel("Azimuth")
+        ax.set_ylabel("Range")
+
+        if kwargs.get("show", True):
+            plt.show()
 
     def _process_raw_adc_2d(self) -> np.array:
         """Radar Signal Processing on raw ADC data.
@@ -616,27 +834,13 @@ class SCRadar(Lidar):
         if self.raw is None:
             info("No raw ADC samples available!")
             return None
-        ntx: int = self.calibration.waveform.num_tx
-
-        # ADC sampling frequency
-        fs: float = self.calibration.waveform.adc_sample_frequency
-
-        # Frequency slope
-        fslope: float = self.calibration.waveform.frequency_slope
-
-        # Start frequency
-        fstart: float = self.calibration.waveform.start_frequency
-
-        # Ramp end time
-        te: float = self.calibration.waveform.ramp_end_time
-
-        # Chirp time
-        tc: float = self.calibration.waveform.idle_time + te
 
         signal_power = self._process_raw_adc()
 
         # Size of elevation, azimuth, doppler, and range bins
         Ne, Na, Nv, Nr = signal_power.shape
+        # Range, Doppler, Azimuth and Elevation bins
+        rbins, vbins, abins, ebins = self._get_bins(Nr, Nv, Na, Ne)
 
         #
         # Noise filering masks
@@ -644,7 +848,7 @@ class SCRadar(Lidar):
 
         # Doppler Non-coherent integration
         sp = np.sum(signal_power, (0, 1, 3))
-        dmask = rdsp.os_cfar(
+        dmask= rdsp.os_cfar(
             sp,
             self.CFAR_WS//2,
             self.CFAR_GC//2
@@ -652,32 +856,12 @@ class SCRadar(Lidar):
 
         # Non-coherent integration with Azimuth-Range 2D noise filtering
         sp = np.sum(signal_power, (0, 2))
-        rmask = rdsp.nq_cfar_2d(
+        rmask, _ = rdsp.nq_cfar_2d(
             sp,
             self.CFAR_WS,
             self.CFAR_GC
-        ).reshape(1, Na, 1, Nr)
-
-        # Range bins
-        rbins = rdsp.get_range_bins(Nr, fs, fslope)
-        # Velocity bins
-        vbins = rdsp.get_velocity_bins(ntx, Nv, fstart, tc)
-        # Azimuth bins
-        ares = 2 * self.AZIMUTH_FOV / Na
-        # Estimate azimuth angles and flip the azimuth axis
-        abins = -1 * np.arcsin(
-            np.arange(-self.AZIMUTH_FOV, self.AZIMUTH_FOV, ares) / (
-                2 * np.pi * self.calibration.d
-            )
         )
-        # Elevation
-        eres = 2 * self.ELEVATION_FOV / Ne
-        # Estimate elevation angles and flip the elevation axis
-        ebins = -1 * np.arcsin(
-            np.arange(-self.ELEVATION_FOV, self.ELEVATION_FOV, eres) / (
-                2 * np.pi * self.calibration.d
-            )
-        )
+        rmask = rmask.reshape(1, Na, 1, Nr)
 
         dpcl = 10 * np.log10(signal_power + 1)
         dpcl *= dmask * rmask
@@ -790,31 +974,16 @@ class SCRadar(Lidar):
         if self.raw is None:
             info("No raw ADC samples available!")
             return None
-        # ADC sampling frequency
-        fs: float = self.calibration.waveform.adc_sample_frequency
-
-        # Frequency slope
-        fslope: float = self.calibration.waveform.frequency_slope
 
         signal_power = self._process_raw_adc_2d()
 
         # Size of elevation, azimuth, doppler, and range bins
         Na, Nv, Nr = signal_power.shape
+        rbins, _, abins, _ = self._get_bins(Nr, None, Na, None)
 
         # Noise filtering mask
         sp = np.sum(signal_power, 1)
-        mask = rdsp.nq_cfar_2d(sp, self.CFAR_WS, self.CFAR_GC)
-
-        # Range bins
-        rbins = rdsp.get_range_bins(Nr, fs, fslope) # np.arange(0, Nr)
-        # Azimuth bins
-        ares = 2 * self.AZIMUTH_FOV / Na
-        # Estimate azimuth angle and flip the azimuth axis
-        abins = -1 * np.arcsin(
-            np.arange(-self.AZIMUTH_FOV, self.AZIMUTH_FOV, ares)/(
-                2 * np.pi * self.calibration.d
-            )
-        )
+        mask, _ = rdsp.nq_cfar_2d(sp, self.CFAR_WS, self.CFAR_GC)
 
         dpcl = np.log10(signal_power)
         dpcl = np.sum(dpcl, 1)
@@ -864,7 +1033,7 @@ class CCRadar(SCRadar):
 
     CFAR_WS: int = 32
     CFAR_GC: int = 16
-    AZIMUTH_FOV: float = np.deg2rad(180)
+    AZIMUTH_FOV: float = np.deg2rad(90)
     ELEVATION_FOV: float = np.deg2rad(20)
 
 

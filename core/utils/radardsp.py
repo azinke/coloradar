@@ -281,6 +281,28 @@ def os_cfar(samples: np.array, ws: int, ngc: int = 2, tos: int = 8) -> np.array:
     return mask
 
 
+class ObjectDetected:
+    """Object detected.
+
+    Definition of object detected by applying CFAR
+
+    NOTE: It's possible to have multiple detections on the same object
+    depending on the resolution of the radar sensor
+    """
+
+    vidx: int = -1      # Velocity bin index
+    ridx: int = -1      # Range bin index
+    aidx: int = -1      # Azimuth bin index
+    eidx: int = -1      # Elevation bin
+    snr: float = 0      # Signal over Noise ratio
+
+    def __str__(self) -> str:
+        return f"Obj(SNR:{self.snr:.2f})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
 def nq_cfar_2d(samples, ws: int, ngc: int,
              quantile: float = 0.75, tos: int = 8) -> np.array:
     """N'th quantile statistic Constant False Alarm Rate detector.
@@ -299,6 +321,7 @@ def nq_cfar_2d(samples, ws: int, ngc: int,
     """
     nx, ny = samples.shape
     mask = np.zeros((nx, ny))
+    detections: list[ObjectDetected] = []
 
     for xidx in range(nx):
         # Before CUT (Cell Under Test) start index on the x-axis
@@ -354,7 +377,12 @@ def nq_cfar_2d(samples, ws: int, ngc: int,
             m = np.quantile(tcells, quantile, method="weibull")
             if samples[xidx, yidx] > (m * tos):
                 mask[xidx, yidx] = 1
-    return mask
+                obj = ObjectDetected()
+                obj.vidx = xidx
+                obj.ridx = yidx
+                obj.snr = samples[xidx, yidx] / m
+                detections.append(obj)
+    return mask, detections
 
 
 def velocity_compensation(dfft: np.array, ntx, nrx, nc) -> None:
@@ -375,5 +403,5 @@ def velocity_compensation(dfft: np.array, ntx, nrx, nc) -> None:
     li = np.repeat(np.arange(ntx), nrx * nc) * np.arange(-mimo_nc/2, mimo_nc/2) / (mimo_nc * ntx)
     velocity_compensation = np.exp(-2j * np.pi * li).reshape(mimo_nc, -1)
     dfft = dfft.reshape(mimo_nc, -1) * velocity_compensation
-    dfft = dfft.reshape(ntx * nrx, nc, -1)
+    dfft = dfft.reshape(ntx, nrx, nc, -1)
     return dfft
