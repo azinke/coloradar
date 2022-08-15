@@ -38,6 +38,9 @@ class SCRadar(Lidar):
     # CFAR guard cell
     CFAR_GC: int = 8
 
+    AZIMUTH_FOV: float = np.deg2rad(60)
+    ELEVATION_FOV: float = np.deg2rad(15)
+
     def __init__(self, config: dict[str, str],
                  calib: Calibration, index: int) -> None:
         """Init.
@@ -660,11 +663,21 @@ class SCRadar(Lidar):
         # Velocity bins
         vbins = rdsp.get_velocity_bins(ntx, Nv, fstart, tc)
         # Azimuth bins
-        ares = np.pi / Na
-        abins = np.arange(-np.pi/2, np.pi/2, ares)
+        ares = 2 * self.AZIMUTH_FOV / Na
+        # Estimate azimuth angles and flip the azimuth axis
+        abins = -1 * np.arcsin(
+            np.arange(-self.AZIMUTH_FOV, self.AZIMUTH_FOV, ares) / (
+                2 * np.pi * self.calibration.d
+            )
+        )
         # Elevation
-        eres = np.pi / Ne
-        ebins = np.arange(-np.pi/2, np.pi/2, eres)
+        eres = 2 * self.ELEVATION_FOV / Ne
+        # Estimate elevation angles and flip the elevation axis
+        ebins = -1 * np.arcsin(
+            np.arange(-self.ELEVATION_FOV, self.ELEVATION_FOV, eres) / (
+                2 * np.pi * self.calibration.d
+            )
+        )
 
         dpcl = 10 * np.log10(signal_power + 1)
         dpcl *= dmask * rmask
@@ -795,8 +808,13 @@ class SCRadar(Lidar):
         # Range bins
         rbins = rdsp.get_range_bins(Nr, fs, fslope) # np.arange(0, Nr)
         # Azimuth bins
-        ares = np.pi / Na
-        abins = np.arange(-np.pi/2, np.pi/2, ares) # np.arange(0, Na)
+        ares = 2 * self.AZIMUTH_FOV / Na
+        # Estimate azimuth angle and flip the azimuth axis
+        abins = -1 * np.arcsin(
+            np.arange(-self.AZIMUTH_FOV, self.AZIMUTH_FOV, ares)/(
+                2 * np.pi * self.calibration.d
+            )
+        )
 
         dpcl = np.log10(signal_power)
         dpcl = np.sum(dpcl, 1)
@@ -846,6 +864,8 @@ class CCRadar(SCRadar):
 
     CFAR_WS: int = 32
     CFAR_GC: int = 16
+    AZIMUTH_FOV: float = np.deg2rad(180)
+    ELEVATION_FOV: float = np.deg2rad(20)
 
 
     def _phase_calibration(self) -> np.array:
