@@ -123,17 +123,24 @@ class Record:
                 self.load(sensor)
                 SIZE: int = 6   # inch
                 plt.figure(1, clear=True, dpi=dpi, figsize=(SIZE, SIZE))
-                if not kwargs.get("heatmap_3d"):
+                if kwargs.get("heatmap_3d") == False:
                     self.ccradar.show2dHeatmap(False, False)
-                else:
+                elif kwargs.get("heatmap_3d"):
                     self.ccradar.showHeatmapFromRaw(
                         kwargs.get("threshold"),
                         kwargs.get("no_sidelobe"),
                         kwargs.get("velocity_view"),
-                        True, # polar
+                        kwargs.get("polar"),
                         show=False,
                     )
-                plt.savefig(f"{output_dir}/radar_heatmap_{idx:04}.jpg", dpi=dpi)
+                elif kwargs.get("pointcloud"):
+                    self.ccradar.showPointcloudFromRaw(
+                        kwargs.get("velocity_view"),
+                        kwargs.get("bird_eye_view"),
+                        kwargs.get("polar"),
+                        show=False,
+                    )
+                plt.savefig(f"{output_dir}/radar_{idx:04}.jpg", dpi=dpi)
 
     def make_video(self, inputdir: str, ext: str = "jpg") -> None:
         """Make video out of pictures"""
