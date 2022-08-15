@@ -197,6 +197,8 @@ class SCRadarCalibration:
         coupling: Antenna coupling calibration
         heatmap: Heatmap recording configuration
         waveform: Waveform generation parameters and calibration
+        d: The optimal inter-antenna distance estimation in unit of
+           a wavelength
     """
 
     def __init__(self, config: dict[str, str]) -> None:
@@ -217,6 +219,18 @@ class SCRadarCalibration:
         self.coupling = CouplingCalibration(config["coupling"])
         self.waveform = WaveformConfiguration(config["waveform"])
         self.heatmap = HeatmapConfiguration(config["heatmap"])
+
+        # Chirp start frequency in GHz
+        fstart: float = self.waveform.start_frequency / 1e9
+        # Chirp slope in GHz/s
+        fslope: float = self.waveform.frequency_slope / 1e9
+        # ADC sampling frequency in Hz
+        fsample: float = self.waveform.adc_sample_frequency
+        # Chrip sampling time in s
+        stime: float = self.waveform.num_adc_samples_per_chirp / fsample
+        # Antenna PCB design base frequency
+        fdesign: float = self.antenna.f_design
+        self.d = 0.5 * ((fstart + (fslope * stime) / 2) / fdesign)
 
     def get_coupling_calibration(self) -> np.array:
         """Return the coupling calibration array to apply on the range fft."""
