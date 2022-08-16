@@ -88,7 +88,7 @@ class Record:
                               2D heatmap is generated
         """
         # Dot per inch
-        dpi: int = 1200
+        dpi: int = 400
 
         # Output directory path
         output_dir: str = kwargs.get("output", "output")
@@ -121,7 +121,7 @@ class Record:
                 print(f"Progress [ {idx} / {nb_files} ]\r", end="")
                 self.index = idx
                 self.load(sensor)
-                SIZE: int = 6   # inch
+                SIZE: int = 10   # inch
                 plt.figure(1, clear=True, dpi=dpi, figsize=(SIZE, SIZE))
                 if kwargs.get("heatmap_3d") == False:
                     self.ccradar.show2dHeatmap(False, False)

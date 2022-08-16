@@ -150,6 +150,16 @@ def fft_size(size: int) -> int:
     return 2 ** int(np.ceil(np.log(size) / np.log(2)))
 
 
+def get_max_range(fs: float, fslope: float) -> float:
+    """Compute the maximum range of the radar.
+
+    Arguments:
+        fs: Sampling frequency
+        fslope: Chirp slope frequency
+    """
+    return fs * C / (2 * fslope)
+
+
 def get_range_resolution(ns: int, fs: float, fslope,
                         is_adc_filtered: bool = True) -> float:
     """Compute the range resolution of a Radar sensor.
@@ -208,7 +218,7 @@ def get_range_bins(ns: int, fs: float, fslope) -> np.array:
     Return:
         Array of range bins
     """
-    rmax: float = fs * C / (2 * fslope)
+    rmax: float = get_max_range(fs, fslope)
     # Resolution used for rendering
     # Note: Not the actual sensor resolution
     rres = rmax / ns

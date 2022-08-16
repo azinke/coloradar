@@ -723,6 +723,15 @@ class SCRadar(Lidar):
         Arguments:
             bird_eye_view: Enable 2D Bird Eye View rendering
         """
+        # ADC sampling frequency
+        fs: float = self.calibration.waveform.adc_sample_frequency
+
+        # Frequency slope
+        fslope: float = self.calibration.waveform.frequency_slope
+
+        # Maximum range
+        rmax: float = rdsp.get_max_range(fs, fslope)
+
         pcl = self._generate_radar_pcl()
         # Remove very close range
         pcl = pcl[pcl[:, 1] >= 1.0]
@@ -751,12 +760,18 @@ class SCRadar(Lidar):
                 pcl[:, 2],
                 c=pcl[:, 3] if velocity_view else pcl[:, 4],
                 cmap=plt.cm.get_cmap(),
-                s=5.0, # Marker size
+                s=4.0, # Marker size
             )
             plt.colorbar(map, ax=ax)
 
         ax.set_xlabel("Azimuth")
         ax.set_ylabel("Range")
+
+        if polar:
+            ax.set_xlim(-1, 1)
+        else:
+            ax.set_xlim(-rmax/2, rmax/2)
+        ax.set_ylim(0, rmax)
 
         if kwargs.get("show", True):
             plt.show()
