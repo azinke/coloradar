@@ -6,6 +6,7 @@ A record is a collection of measurement from different sensors
 from glob import glob
 import sys
 import os
+import multiprocessing
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as anim
@@ -88,12 +89,17 @@ class Record:
                               2D heatmap is generated
         """
         # Dot per inch
-        dpi: int = 400
+        self._dpi: int = 400
+        self._kwargs = kwargs
+        self._sensor = sensor
 
         # Output directory path
         output_dir: str = kwargs.get("output", "output")
         output_dir = f"{output_dir}/{self.codename}/{sensor}"
         os.makedirs(output_dir, exist_ok=True)
+        self._output_dir = output_dir
+        cpu_count: int = multiprocessing.cpu_count()
+        print(f"Please wait! Processing on {cpu_count} CPU(s)")
 
         if sensor == "lidar":
             dataset_path: str = os.path.join(
@@ -101,46 +107,83 @@ class Record:
                 self.descriptor["paths"][sensor]["data"]
             )
             nb_files: int = len(os.listdir(dataset_path)) - 1
-            for idx in range(1, nb_files + 1):
-                print(f"Progress [ {idx} / {nb_files} ]\r", end="")
-                self.index = idx
-                self.load(sensor)
-                bev = self.lidar.getBirdEyeView(
-                    kwargs.get("resolution", 0.05),
-                    kwargs.get("srange"),
-                    kwargs.get("frange"),
+            with multiprocessing.Pool(cpu_count) as pool:
+                pool.map(
+                    self._process_lidar,
+                    range(1, nb_files + 1),
+                    chunksize=10
                 )
-                plt.imsave(f"{output_dir}/lidar_bev_{idx:04}.jpg", bev)
         elif (sensor == "ccradar") or (sensor == "scradar"):
             dataset_path: str = os.path.join(
                 self.descriptor["paths"]["rootdir"],
                 self.descriptor["paths"][sensor]["raw"]["data"]
             )
             nb_files: int = len(os.listdir(dataset_path)) - 1
-            for idx in range(1, nb_files + 1):
-                print(f"Progress [ {idx} / {nb_files} ]\r", end="")
-                self.index = idx
-                self.load(sensor)
-                SIZE: int = 10   # inch
-                plt.figure(1, clear=True, dpi=dpi, figsize=(SIZE, SIZE))
-                if kwargs.get("heatmap_3d") == False:
-                    self.ccradar.show2dHeatmap(False, False)
-                elif kwargs.get("heatmap_3d"):
-                    self.ccradar.showHeatmapFromRaw(
-                        kwargs.get("threshold"),
-                        kwargs.get("no_sidelobe"),
-                        kwargs.get("velocity_view"),
-                        kwargs.get("polar"),
-                        show=False,
-                    )
-                elif kwargs.get("pointcloud"):
-                    self.ccradar.showPointcloudFromRaw(
-                        kwargs.get("velocity_view"),
-                        kwargs.get("bird_eye_view"),
-                        kwargs.get("polar"),
-                        show=False,
-                    )
-                plt.savefig(f"{output_dir}/radar_{idx:04}.jpg", dpi=dpi)
+            with multiprocessing.Pool(cpu_count) as pool:
+                pool.map(
+                    self._process_radar,
+                    range(1, nb_files + 1),
+                    chunksize=10
+                )
+
+    def _process_radar(self, idx: int) -> int:
+        """Handler of radar data processing.
+
+        Used as the handler for parallel processing. The context attributes
+        needed by this method are only defined in the method `process_and_save`
+        As so, only that method is supposed to call this one.
+
+        NOTE: THIS METHOD IS NOT EXPECTED TO BE CALLED FROM OUTSIDE OF THIS
+        CLASS
+
+        Argument:
+            idx: Index of the file to process
+        """
+        self.index = idx
+        self.load(self._sensor)
+        SIZE: int = 10   # inch
+        plt.figure(1, clear=True, dpi=self._dpi, figsize=(SIZE, SIZE))
+        if self._kwargs.get("heatmap_3d") == False:
+            self.ccradar.show2dHeatmap(False, False)
+        elif self._kwargs.get("heatmap_3d"):
+            self.ccradar.showHeatmapFromRaw(
+                self._kwargs.get("threshold"),
+                self._kwargs.get("no_sidelobe"),
+                self._kwargs.get("velocity_view"),
+                self._kwargs.get("polar"),
+                show=False,
+            )
+        elif self._kwargs.get("pointcloud"):
+            self.ccradar.showPointcloudFromRaw(
+                self._kwargs.get("velocity_view"),
+                self._kwargs.get("bird_eye_view"),
+                self._kwargs.get("polar"),
+                show=False,
+            )
+        plt.savefig(f"{self._output_dir}/radar_{idx:04}.jpg", dpi=self._dpi)
+        return idx
+
+    def _process_lidar(self, idx: int) -> int:
+        """Handler of lidar data processing.
+
+        Used as the handler for parallel processing. The context attributes
+        needed by this method are only defined in the method `process_and_save`
+        As so, only that method is supposed to call this one.
+
+        NOTE: THIS METHOD IS NOT EXPECTED TO BE CALLED FROM OUTSIDE OF THIS
+        CLASS
+
+        Argument:
+            idx: Index of the file to process
+        """
+        self.index = idx
+        self.load(self._sensor)
+        bev = self.lidar.getBirdEyeView(
+            self._kwargs.get("resolution", 0.05),
+            self._kwargs.get("srange"),
+            self._kwargs.get("frange"),
+        )
+        plt.imsave(f"{self._output_dir}/lidar_bev_{idx:04}.jpg", bev)
 
     def make_video(self, inputdir: str, ext: str = "jpg") -> None:
         """Make video out of pictures"""
