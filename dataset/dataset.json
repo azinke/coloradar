@@ -33,6 +33,10 @@
         "path": "12_21_2020_ec_hallways_run0"
       },
       {
+        "codename": "hallway4",
+        "path": "12_21_2020_ec_hallways_run4"
+      },
+      {
         "codename": "hallway1",
         "path": "12_21_2020_ec_hallways_run1"
       },
@@ -41,12 +45,20 @@
         "path": "2_28_2021_outdoors_run0"
       },
       {
+        "codename": "aspen0",
+        "path": "2_24_2021_aspen_run0"
+      },
+      {
         "codename": "aspen9",
         "path": "2_24_2021_aspen_run9"
       },
       {
         "codename": "edgar5",
         "path": "2_23_2021_edgar_army_run5"
+      },
+      {
+        "codename": "longboard1",
+        "path": "2_22_2021_longboard_run1"
       }
     ],
     "paths": {
