@@ -616,27 +616,33 @@ class SCRadar(Lidar):
         # Na: Number of azimuth in the virtual array
         # Nc: Number of chirp per antenna in the virtual array
         # Ns: Number of samples per chirp
-        Ne, Na, Nc, Ns = virtual_array.shape
+        va_ne, va_na, va_nc, va_ns = virtual_array.shape
+
+        Ne, Na, Nc, Ns = self._get_fft_size(*virtual_array.shape)
 
         # Range-FFT
-        # adc_samples *= np.blackman(ns).reshape(1, 1, -1)
+        virtual_array *= np.blackman(va_ns).reshape(1, 1, 1, -1)
         rfft = np.fft.fft(virtual_array, Ns, -1)
         rfft = rfft - coupling_calib
 
         # Doppler-FFT
+        rfft *= np.blackman(va_nc).reshape(1, 1, -1, 1)
         dfft = np.fft.fft(rfft, Nc, -2)
+        dfft = np.fft.fftshift(dfft, -2)
         # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
 
+        dfft *= np.blackman(va_na).reshape(1, -1, 1, 1)
         # Azimuth estimation
         afft = np.fft.fft(dfft, Na, 1)
+        afft = np.fft.fftshift(afft, 1)
 
+        afft *= np.blackman(va_ne).reshape(-1, 1, 1, 1)
         # Elevation esitamtion
-        afft = np.fft.fft(afft, Ne, 0)
-
-        afft = np.fft.fftshift(afft, (0, 1, 2))
+        efft = np.fft.fft(afft, Ne, 0)
+        efft = np.fft.fftshift(efft, 0)
 
         # Return the signal power
-        return np.abs(afft) ** 2
+        return np.abs(efft) ** 2
 
     def _generate_radar_pcl(self) -> np.array:
         """Generate point cloud."""
@@ -661,6 +667,7 @@ class SCRadar(Lidar):
                 rfft = rfft - self.calibration.get_coupling_calibration()[tidx, ridx, :, :]
 
                 # Doppler-FFT
+                rfft *= np.blackman(nc).reshape(-1, 1)
                 dfft = np.fft.fft(rfft, nc, -2)
                 # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
                 dfft = np.fft.fftshift(dfft, -2)
@@ -679,6 +686,7 @@ class SCRadar(Lidar):
             self.calibration.antenna.txl,
             self.calibration.antenna.rxl
         )
+        va_ne, va_na, _, _ = va.shape
 
         # Optional FFT size respectively for the elevation, azimuth,
         # doppler and range axis
@@ -688,11 +696,13 @@ class SCRadar(Lidar):
         rbins, vbins, abins, ebins = self._get_bins(Ns, Nc, Na, Ne)
 
         # Azimuth estimation
+        va *= np.blackman(va_na).reshape(1, -1, 1, 1)
         afft = np.fft.fft(va, Na, 1)
         afft = np.fft.fftshift(afft, 1)
 
         # Elevation esitamtion
-        efft = np.fft.fft(afft, Ne, 0)
+        _afft = afft * np.blackman(va_ne).reshape(-1, 1, 1, 1)
+        efft = np.fft.fft(_afft, Ne, 0)
         efft = np.fft.fftshift(efft, 0)
 
         pcl = np.zeros((len(detections), 5))
@@ -770,7 +780,7 @@ class SCRadar(Lidar):
         if polar:
             ax.set_xlim(-1, 1)
         else:
-            ax.set_xlim(-rmax/2, rmax/2)
+            ax.set_xlim(-rmax/2 + 1.5, rmax/2 - 1.5)
         ax.set_ylim(0, rmax)
 
         if kwargs.get("show", True):
@@ -797,21 +807,25 @@ class SCRadar(Lidar):
         # Na: Number of azimuth in the virtual array
         # Nc: Number of chirp per antenna in the virtual array
         # Ns: Number of samples per chirp
-        Na, Nc, Ns = virtual_array.shape
+        va_na, va_nc, va_ns = virtual_array.shape
+
+        _, Na, Nc, Ns = self._get_fft_size(None, va_na, va_nc, va_ns)
 
         # Range-FFT
-        # adc_samples *= np.blackman(ns).reshape(1, 1, -1)
+        virtual_array *= np.blackman(va_ns).reshape(1, 1, -1)
         rfft = np.fft.fft(virtual_array, Ns, -1)
         rfft = rfft - coupling_calib
 
+        rfft *= np.blackman(va_nc).reshape(1, -1, 1)
         # Doppler-FFT
         dfft = np.fft.fft(rfft, Nc, 1)
+        dfft = np.fft.fftshift(dfft, 1)
         # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
 
+        dfft *= np.blackman(va_na).reshape(-1, 1, 1)
         # Azimuth estimation
         afft = np.fft.fft(dfft, Na, 0)
-
-        afft = np.fft.fftshift(afft, (0, 1))
+        afft = np.fft.fftshift(afft, 0)
 
         # Return the signal power
         return np.abs(afft) ** 2
@@ -1005,15 +1019,18 @@ class SCRadar(Lidar):
         dpcl *= mask
         dpcl /= np.max(dpcl)
 
+        # Number of close range bins to skip
+        roffset: int = 15
+
         if not polar:
             hmap = np.zeros((Na * Nr, 3))
 
             for aidx, _az in enumerate(abins):
-                for ridx, _r in enumerate(rbins):
-                    hmap[ridx + Nr * aidx] = np.array([
+                for ridx, _r in enumerate(rbins[roffset:]):
+                    hmap[ridx + roffset + Nr * aidx] = np.array([
                         _r * np.sin(_az),   # Azimuth
                         _r * np.cos(_az),   # Range
-                        dpcl[aidx, ridx],
+                        dpcl[aidx, ridx + roffset],
                     ])
 
             ax = plt.axes()
