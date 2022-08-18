@@ -302,6 +302,7 @@ def main () -> None:
             if args.heatmap_2d:
                 record.process_and_save(
                     "ccradar",
+                    heatmap_3d=False,
                     output=args.save_to,
                 )
                 success("Radar 2D heatmap generated with success!")
