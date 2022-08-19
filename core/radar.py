@@ -744,7 +744,12 @@ class SCRadar(Lidar):
 
         pcl = self._generate_radar_pcl()
         # Remove very close range
-        pcl = pcl[pcl[:, 1] >= 1.0]
+        pcl = pcl[pcl[:, 1] >= 1.5]
+
+        # Exclude all points detected in the last range bins because
+        # those detections are not reliable
+        pcl = pcl[pcl[:, 1] < (0.95 * rmax)]
+
         if not polar:
             pcl = self._to_cartesian(pcl)
             pcl = pcl[:, (1, 0, 2, 3, 4)]  # swap range and azimuth
@@ -780,7 +785,7 @@ class SCRadar(Lidar):
         if polar:
             ax.set_xlim(-1, 1)
         else:
-            ax.set_xlim(-rmax/2 + 1.5, rmax/2 - 1.5)
+            ax.set_xlim(-rmax/2, rmax/2)
         ax.set_ylim(0, rmax)
 
         if kwargs.get("show", True):
