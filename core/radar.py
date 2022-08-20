@@ -39,8 +39,8 @@ class SCRadar(Lidar):
     # CFAR guard cell
     CFAR_GC: int = 8
 
-    AZIMUTH_FOV: float = np.deg2rad(60)
-    ELEVATION_FOV: float = np.deg2rad(15)
+    AZIMUTH_FOV: float = np.deg2rad(90)
+    ELEVATION_FOV: float = np.deg2rad(20)
 
     def __init__(self, config: dict[str, str],
                  calib: Calibration, index: int) -> None:

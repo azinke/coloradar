@@ -13,7 +13,7 @@ from core.utils.common import info, success
 def main () -> None:
     """Main entry point for the cli interface."""
     parser = argparse.ArgumentParser(
-        prog="Coloradar Dataset loader",
+        prog="coloradar.py",
         description="Facility for interacting with the Coloradar dataset."
     )
     parser.add_argument(
@@ -231,7 +231,16 @@ def main () -> None:
                 sys.exit(0)
             elif args.raw:
                 info("Processing raw ADC samples ...")
-                if args.heatmap_2d:
+                if args.pointcloud:
+                    info("Rendering Radar pointcloud ...")
+                    record.scradar.showPointcloudFromRaw(
+                        args.velocity_view,
+                        args.bird_eye_view,
+                        args.polar
+                    )
+                    success("Successfully closed!")
+                    sys.exit(0)
+                elif args.heatmap_2d:
                     info("Rendering 2D heatmap ...")
                     record.scradar.show2dHeatmap()
                     sys.exit(0)
@@ -246,7 +255,7 @@ def main () -> None:
                 )
                 success("Successfully closed!")
                 sys.exit(0)
-            info("Rendering lidar pointcloud ...")
+            info("Rendering single chip radar pointcloud ...")
             record.scradar.show()
             success("Successfully closed!")
             sys.exit(0)
