@@ -39,9 +39,9 @@ class Coloradar:
     def printCodenames(self) -> None:
         """Print the available sub-dataset and their codename."""
         print(" Coloradar dataset")
-        print("   [CODENAME]        [DIRECTORY NAME]")
+        print(f"   {'[CODENAME]':30} [DIRECTORY NAME]")
         for dataset in self.config["datastore"]["folders"]:
-            print(f"   {dataset['codename']}             {dataset['path']}")
+            print(f"   {dataset['codename']:30} {dataset['path']}")
         print()
 
     def __str__(self) -> str:
