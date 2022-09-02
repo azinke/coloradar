@@ -111,19 +111,19 @@ def main () -> None:
         "-r",
         help="Bird eye view resolution",
         type=float,
-        default=0.05,
+        default=0.025,
     )
     parser.add_argument(
         "--width",
         help="Bird eye view image width",
         type=float,
-        default=80.0,
+        default=30.0,
     )
     parser.add_argument(
         "--height",
         help="Bird eye view image height",
         type=float,
-        default=80.0,
+        default=30.0,
     )
     parser.add_argument(
         "--groundtruth",

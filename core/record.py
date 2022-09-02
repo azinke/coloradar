@@ -141,7 +141,7 @@ class Record:
         """
         self.index = idx
         self.load(self._sensor)
-        SIZE: int = 10   # inch
+        SIZE: int = 24   # inch
         plt.figure(1, clear=True, dpi=self._dpi, figsize=(SIZE, SIZE))
         if self._kwargs.get("heatmap_3d") == False:
             self.ccradar.show2dHeatmap(False, False)

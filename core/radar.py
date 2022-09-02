@@ -247,8 +247,8 @@ class SCRadar(Lidar):
             self._to_cartesian(hmap)
         """
         pcld = np.zeros(hmap.shape)
-        pcld[:, 0] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.cos(hmap[:, 0])
-        pcld[:, 1] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.sin(hmap[:, 0])
+        pcld[:, 0] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.sin(hmap[:, 0])
+        pcld[:, 1] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.cos(hmap[:, 0])
         pcld[:, 2] = hmap[:, 1] * np.sin(hmap[:, 2])
         pcld[:, 3:] = hmap[:, 3:]
         return pcld
@@ -626,17 +626,14 @@ class SCRadar(Lidar):
         rfft = rfft - coupling_calib
 
         # Doppler-FFT
-        rfft *= np.blackman(va_nc).reshape(1, 1, -1, 1)
         dfft = np.fft.fft(rfft, Nc, -2)
         dfft = np.fft.fftshift(dfft, -2)
         # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
 
-        dfft *= np.blackman(va_na).reshape(1, -1, 1, 1)
         # Azimuth estimation
         afft = np.fft.fft(dfft, Na, 1)
         afft = np.fft.fftshift(afft, 1)
 
-        afft *= np.blackman(va_ne).reshape(-1, 1, 1, 1)
         # Elevation esitamtion
         efft = np.fft.fft(afft, Ne, 0)
         efft = np.fft.fftshift(efft, 0)
@@ -656,29 +653,29 @@ class SCRadar(Lidar):
         # nc: Number of chirp per antenna in the virtual array
         # ns: Number of samples per chirp
         ntx, nrx, nc, ns = adc_samples.shape
+        _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
 
-        rsignal = np.zeros((ntx, nrx, nc, ns), dtype=np.complex64)
+        rsignal = np.zeros((ntx, nrx, Nc, Ns), dtype=np.complex64)
 
         for tidx in range(ntx):
             for ridx in range(nrx):
                 samples = adc_samples[tidx, ridx, :, :]
                 samples *= np.blackman(ns).reshape(1, -1)
-                rfft = np.fft.fft(samples, ns, -1)
+                rfft = np.fft.fft(samples, Ns, -1)
                 rfft = rfft - self.calibration.get_coupling_calibration()[tidx, ridx, :, :]
 
                 # Doppler-FFT
-                rfft *= np.blackman(nc).reshape(-1, 1)
-                dfft = np.fft.fft(rfft, nc, -2)
+                dfft = np.fft.fft(rfft, Nc, -2)
                 # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
                 dfft = np.fft.fftshift(dfft, -2)
 
                 rsignal[tidx, ridx, :, :] = dfft
 
-        mimo_dfft = rsignal.reshape(ntx * nrx, nc, ns)
+        mimo_dfft = rsignal.reshape(ntx * nrx, Nc, Ns)
         mimo_dfft = np.sum(np.abs(mimo_dfft) ** 2, 0)
 
         # OS-CFAR for object detection
-        _, detections = rdsp.nq_cfar_2d(mimo_dfft, 8, 2)
+        _, detections = rdsp.nq_cfar_2d(mimo_dfft, 8, 1)
 
         # Restructure data based on the virtual antenna
         va = rdsp.virtual_array(
@@ -696,13 +693,11 @@ class SCRadar(Lidar):
         rbins, vbins, abins, ebins = self._get_bins(Ns, Nc, Na, Ne)
 
         # Azimuth estimation
-        va *= np.blackman(va_na).reshape(1, -1, 1, 1)
         afft = np.fft.fft(va, Na, 1)
         afft = np.fft.fftshift(afft, 1)
 
         # Elevation esitamtion
-        _afft = afft * np.blackman(va_ne).reshape(-1, 1, 1, 1)
-        efft = np.fft.fft(_afft, Ne, 0)
+        efft = np.fft.fft(afft, Ne, 0)
         efft = np.fft.fftshift(efft, 0)
 
         pcl = np.zeros((len(detections), 5))
@@ -752,10 +747,9 @@ class SCRadar(Lidar):
 
         if not polar:
             pcl = self._to_cartesian(pcl)
-            pcl = pcl[:, (1, 0, 2, 3, 4)]  # swap range and azimuth
         if bird_eye_view:
             ax = plt.axes()
-            ax.set_title("Radar Bird Eye View")
+            ax.set_title(f"Radar BEV | Frame {self.index:04}")
             ax.scatter(
                 pcl[:, 0],
                 pcl[:, 1],
@@ -767,7 +761,7 @@ class SCRadar(Lidar):
             ax.set(facecolor="black")
         else:
             ax = plt.axes(projection="3d")
-            ax.set_title("4D-FFT processing of raw ADC samples")
+            ax.set_title(f"4D-FFT | Frame {self.index:04}")
             ax.set_zlabel("Elevation")
             map = ax.scatter(
                 pcl[:, 0],
@@ -775,7 +769,7 @@ class SCRadar(Lidar):
                 pcl[:, 2],
                 c=pcl[:, 3] if velocity_view else pcl[:, 4],
                 cmap=plt.cm.get_cmap(),
-                s=4.0, # Marker size
+                s=pcl[:, 4] / 2, # Marker size
             )
             plt.colorbar(map, ax=ax)
 
@@ -970,8 +964,6 @@ class SCRadar(Lidar):
 
         if not polar:
             hmap = self._to_cartesian(hmap)
-            # Swap range and azimuth axis
-            hmap = hmap[:, (1, 0, 2, 3, 4)]
 
         ax = plt.axes(projection="3d")
         ax.set_title("4D-FFT processing of raw ADC samples")
@@ -1021,15 +1013,16 @@ class SCRadar(Lidar):
 
         dpcl = np.log10(signal_power)
         dpcl = np.sum(dpcl, 1)
-        dpcl *= mask
+        dpcl -= np.min(dpcl)
         dpcl /= np.max(dpcl)
+        dpcl *= mask
 
         # Number of close range bins to skip
         roffset: int = 15
 
         if not polar:
+            """
             hmap = np.zeros((Na * Nr, 3))
-
             for aidx, _az in enumerate(abins):
                 for ridx, _r in enumerate(rbins[roffset:]):
                     hmap[ridx + roffset + Nr * aidx] = np.array([
@@ -1038,12 +1031,19 @@ class SCRadar(Lidar):
                         dpcl[aidx, ridx + roffset],
                     ])
 
+            NOTE:
+                The use of kronecker product below is to implement a refactored
+                vectorized version of the for loop above.
+            """
+            _r = np.kron(rbins[roffset:], np.cos(abins))
+            _az = np.kron(rbins[roffset:], np.sin(abins))
+            _pcl = np.transpose(dpcl, (1, 0))[roffset:, :].reshape(-1)
             ax = plt.axes()
             ax.scatter(
-                hmap[:, 0],
-                hmap[:, 1],
-                hmap[:, 2],
-                c=hmap[:, 2],
+                _az,        # hmap[:, 0],
+                _r ,        # hmap[:, 1],
+                _pcl,       # hmap[:, 2],
+                c=_pcl,     # hmap[:, 2],
             )
             ax.set_xlabel("Azimuth (m)")
             ax.set(facecolor="black")
