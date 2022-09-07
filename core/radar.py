@@ -598,6 +598,57 @@ class SCRadar(Lidar):
         )
         return virtual_array, coupling_calib
 
+    def _esprit(self):
+        """."""
+
+        C = 3e8
+        fslope = self.calibration.waveform.frequency_slope
+        fstart = self.calibration.waveform.start_frequency
+        fsample = self.calibration.waveform.adc_sample_frequency
+        # Ramp end time
+        te: float = self.calibration.waveform.ramp_end_time
+
+        # Chirp time
+        tc: float = self.calibration.waveform.idle_time + te
+
+
+        adc_samples = self._calibrate()
+        ntx, nrx, nc, ns = adc_samples.shape
+
+        # Range estimation with ESPRIT
+        radc = np.sum(adc_samples, (0, 1, 2))
+        resp = rdsp.esprit(radc, ns, ns//2)
+        # _r = fsample * (np.angle(resp) / (4 * np.pi)) * (C /fstart)
+        # _r = (np.real(resp) / 2 * np.pi) * (C * fsample) / (2 * 256 * fslope)
+        _r = (fsample * (np.angle(resp) + np.pi ) * C) / (4 * np.pi * fslope)
+
+        rmax: int = rdsp.get_max_range(fsample, fslope)
+        ridx = (_r * ns / rmax).astype(np.int16)
+
+        va = rdsp.virtual_array(
+            adc_samples,
+            self.calibration.antenna.txl,
+            self.calibration.antenna.rxl,
+        )
+        va_ne, va_na, _, _ = va.shape
+
+        __r = []
+        __az = []
+
+        for idx, _ridx in enumerate(ridx):
+            sample = np.sum(va[:, :, :, _ridx ], (0, 2))
+            azesp = rdsp.esprit(sample, va_na, 1)
+            # _v = (np.angle(vesp) * (C/fstart)) / (4 * np.pi * tc)
+            _az = np.arcsin(np.angle(azesp) / np.pi)
+            __r.append(_r[idx] * np.cos(_az))
+            __az.append(_r[idx] * np.sin(_az))
+
+        __r = np.array(__r).reshape(-1)
+        __az = np.array(__az).reshape(-1)
+
+        plt.scatter(__az, __r, 4)
+        plt.show()
+
     def _process_raw_adc(self) -> np.array:
         """Radar Signal Processing on raw ADC data.
 
@@ -651,15 +702,17 @@ class SCRadar(Lidar):
         # nc: Number of chirp per antenna in the virtual array
         # ns: Number of samples per chirp
         ntx, nrx, nc, ns = adc_samples.shape
-        _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
+        # _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
 
         rsignal = np.zeros((ntx, nrx, Nc, Ns), dtype=np.complex64)
         vcomp = rdsp.velocity_compensation(ntx, Nc)
 
-        for tidx in range(ntx):
-            for ridx in range(nrx):
-                samples = adc_samples[tidx, ridx, :, :]
-                samples *= np.blackman(ns).reshape(1, -1)
+        rsignal = np.zeros((Ne, Na, Nc, Ns), dtype=np.complex64)
+
+        for eidx in range(Ne):
+            for aidx in range(Na):
+                samples = va[eidx, aidx, :, :]
+                samples *= np.blackman(Ns).reshape(1, -1)
                 rfft = np.fft.fft(samples, Ns, -1)
 
                 # Doppler-FFT
@@ -667,9 +720,9 @@ class SCRadar(Lidar):
                 dfft = np.fft.fftshift(dfft, -2)
                 dfft *= vcomp[tidx].reshape(Nc, 1)
 
-                rsignal[tidx, ridx, :, :] = dfft
+                rsignal[eidx, aidx, :, :] = dfft
 
-        mimo_dfft = rsignal.reshape(ntx * nrx, Nc, Ns)
+        mimo_dfft = rsignal.reshape(Ne * Na, Nc, Ns)
         mimo_dfft = np.sum(np.abs(mimo_dfft) ** 2, 0)
 
         # OS-CFAR for object detection
@@ -860,6 +913,8 @@ class SCRadar(Lidar):
             kwargs (dict): Optional keyword arguments
                     "show": When false, prevent the rendered heatmap to be shown
         """
+        self._esprit()
+        exit(0)
         if self.raw is None:
             info("No raw ADC samples available!")
             return None

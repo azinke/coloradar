@@ -15,8 +15,12 @@ NUMBER_ELEVATION_BINS_MIN: int = 64
 NUMBER_DOPPLER_BINS_MIN: int = 16
 
 # Minimum number of range bins
+<<<<<<< HEAD
 NUMBER_RANGE_BINS_MIN: int = 256
 
 # DoA estimation methods
 # values: "fft", "esprit"
 DOA_METHOD: str = "esprit"
+=======
+NUMBER_RANGE_BINS_MIN: int = 512
+>>>>>>> 644b290 (fix: Implementation of ESPRIT for frequency and DoA estimation)
