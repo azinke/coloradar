@@ -15,4 +15,4 @@ NUMBER_ELEVATION_BINS_MIN: int = 64
 NUMBER_DOPPLER_BINS_MIN: int = 16
 
 # Minimum number of range bins
-NUMBER_RANGE_BINS_MIN: int = 256
+NUMBER_RANGE_BINS_MIN: int = 512

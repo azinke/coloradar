@@ -78,6 +78,33 @@ def music(signal: np.array, txl: np.array, rxl: np.array,
     return amap
 
 
+def esprit(signal: np.array, order: int, nb_sources: int) -> np.array:
+    """ESPRIT Frequency estiamtion algorithm.
+
+    Arguments:
+        signal: Samples of the signal
+        order: Order of the signal
+        nb_sources: Number of sources (or targets)
+    Return:
+        Normalized angular frequencies
+    """
+    N = len(signal)
+    signal = np.asmatrix(signal)
+    # Covariance of the received signal
+    R = (1.0 / N) * signal.H * signal
+
+    eigval, eigvect = np.linalg.eig(R)
+    idx = eigval.argsort()[::-1]
+    eigvect = eigvect[:, idx]
+
+    s = eigvect[:, 0:nb_sources]
+    s1 = s[0:order-1, :]
+    s2 = s[1:order:, :]
+    p = np.linalg.pinv(s1) @ s2
+    eigs, _ = np.linalg.eig(p)
+    return eigs
+
+
 def virtual_array(adc_samples: np.array,
                   txl: list[list[int]],
                   rxl: list[list[int]]) -> np.array:
