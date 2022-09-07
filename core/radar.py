@@ -3,7 +3,6 @@
 SCRadar: Single Chip Radar Sensor
 CCRadar: Cascade Chip Radar Sensor
 """
-from optparse import Option
 from typing import Optional
 import os
 import numpy as np
@@ -417,6 +416,8 @@ class SCRadar(Lidar):
         NOTE: Only the casacde chip radar sensor has the frequency and phase
         calibration
         """
+        if self.raw is None:
+            exit(1)
         adc_samples = self.raw
 
         # Remove DC bias
@@ -596,7 +597,6 @@ class SCRadar(Lidar):
         )
         return virtual_array, coupling_calib
 
-
     def _process_raw_adc(self) -> np.array:
         """Radar Signal Processing on raw ADC data.
 
@@ -605,19 +605,19 @@ class SCRadar(Lidar):
         targets detected by the radar.
 
         NOTE: The Angle estimation based on FFT doesn't provide high accurary.
-        Thus, more advanced methods like MUSIC or ESPRIT could be implemented.
+        Thus, more advanced methods like MUSIC or ESPRIT could be implemented
+        in trade with computational time.
         """
         # Calibrate raw data
         adc_samples = self._calibrate()
 
         virtual_array, coupling_calib = self._pre_process(adc_samples)
+        va_ne, va_na, va_nc, va_ns = virtual_array.shape
 
         # Ne: Number of elevations in the virtual array
         # Na: Number of azimuth in the virtual array
         # Nc: Number of chirp per antenna in the virtual array
         # Ns: Number of samples per chirp
-        va_ne, va_na, va_nc, va_ns = virtual_array.shape
-
         Ne, Na, Nc, Ns = self._get_fft_size(*virtual_array.shape)
 
         # Range-FFT
@@ -628,7 +628,6 @@ class SCRadar(Lidar):
         # Doppler-FFT
         dfft = np.fft.fft(rfft, Nc, -2)
         dfft = np.fft.fftshift(dfft, -2)
-        # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
 
         # Azimuth estimation
         afft = np.fft.fft(dfft, Na, 1)
@@ -653,69 +652,71 @@ class SCRadar(Lidar):
         # nc: Number of chirp per antenna in the virtual array
         # ns: Number of samples per chirp
         ntx, nrx, nc, ns = adc_samples.shape
-        _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
+        # _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
 
-        rsignal = np.zeros((ntx, nrx, Nc, Ns), dtype=np.complex64)
+        va, ccalib = self._pre_process(adc_samples)
+        Ne, Na, Nc, Ns = va.shape
 
-        for tidx in range(ntx):
-            for ridx in range(nrx):
-                samples = adc_samples[tidx, ridx, :, :]
-                samples *= np.blackman(ns).reshape(1, -1)
+        rsignal = np.zeros((Ne, Na, Nc, Ns), dtype=np.complex64)
+
+        for eidx in range(Ne):
+            for aidx in range(Na):
+                samples = va[eidx, aidx, :, :]
+                samples *= np.blackman(Ns).reshape(1, -1)
                 rfft = np.fft.fft(samples, Ns, -1)
-                rfft = rfft - self.calibration.get_coupling_calibration()[tidx, ridx, :, :]
+                rfft = rfft - ccalib[eidx, aidx, :, :]
 
                 # Doppler-FFT
                 dfft = np.fft.fft(rfft, Nc, -2)
-                # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
                 dfft = np.fft.fftshift(dfft, -2)
 
-                rsignal[tidx, ridx, :, :] = dfft
+                rsignal[eidx, aidx, :, :] = dfft
 
-        mimo_dfft = rsignal.reshape(ntx * nrx, Nc, Ns)
+        mimo_dfft = rsignal.reshape(Ne * Na, Nc, Ns)
         mimo_dfft = np.sum(np.abs(mimo_dfft) ** 2, 0)
 
         # OS-CFAR for object detection
         _, detections = rdsp.nq_cfar_2d(mimo_dfft, 8, 1)
 
-        # Restructure data based on the virtual antenna
-        va = rdsp.virtual_array(
-            rsignal,
-            self.calibration.antenna.txl,
-            self.calibration.antenna.rxl
-        )
-        va_ne, va_na, _, _ = va.shape
-
-        # Optional FFT size respectively for the elevation, azimuth,
-        # doppler and range axis
-        Ne, Na, Nc, Ns = self._get_fft_size(*va.shape)
-
         # Range, doppler, azimuth and elevation bins
         rbins, vbins, abins, ebins = self._get_bins(Ns, Nc, Na, Ne)
-
-        # Azimuth estimation
-        afft = np.fft.fft(va, Na, 1)
-        afft = np.fft.fftshift(afft, 1)
-
-        # Elevation esitamtion
-        efft = np.fft.fft(afft, Ne, 0)
-        efft = np.fft.fftshift(efft, 0)
 
         pcl = np.zeros((len(detections), 5))
 
         for idx, obj in enumerate(detections):
-            #Azimuth estimation
-            _az = np.argmax(np.sum(afft[:, :, obj.vidx, obj.ridx], 0))
-            obj.aidx = _az
+            obj.range = rbins[obj.ridx]
+            obj.velocity = vbins[obj.vidx]
 
-            # Elevation estimation
-            _el = np.argmax(efft[:, _az, obj.vidx, obj.ridx])
-            obj.eidx = _el
+            # Azimuth estimation (With ESPRIT)
+            __az = rdsp.esprit(np.sum(rsignal[:, :, obj.vidx, obj.ridx], 0), Na, 1)
+            __az = np.arcsin(np.angle(__az) / np.pi)
+            obj.az = __az[0]
+
+            # Azimuth bin
+            azidx = np.argmin(np.abs(np.abs(abins) - np.abs(obj.az)))
+
+            """
+            NOTE: Eleviation estimation With FFT
+
+            # Elevation estimation (with ESPRIT)
+            afft = np.fft.fft(rsignal[:, :, obj.vidx, obj.ridx], Na, 1)
+            afft = np.fft.fftshift(afft, 1)
+            efft = np.fft.fft(afft[:, azidx], Ne, 0)
+            efft = np.fft.fftshift(efft, 0)
+            _el = np.argmax(efft)
+            obj.el = ebins[_el]
+            """
+
+            # Elevation estimation (with ESPRIT)
+            __el = rdsp.esprit(rsignal[:, azidx, obj.vidx, obj.ridx], Ne, 1)
+            __el = np.arcsin(np.angle(__el) / np.pi)
+            obj.el = __el[0]
 
             pcl[idx] = np.array([
-                abins[obj.aidx],            # Azimnuth
-                rbins[obj.ridx],            # Range
-                ebins[obj.eidx],            # Elevation
-                vbins[obj.vidx],            # Velocity
+                obj.az,                     # Azimnuth
+                obj.range,                  # Range
+                obj.el,                     # Elevation
+                obj.velocity,               # Velocity
                 10 * np.log10(obj.snr)      # SNR
             ])
         return pcl
@@ -784,50 +785,6 @@ class SCRadar(Lidar):
 
         if kwargs.get("show", True):
             plt.show()
-
-    def _process_raw_adc_2d(self) -> np.array:
-        """Radar Signal Processing on raw ADC data.
-
-        FFT Signal processing is applied on the raw Radar ADC samples.
-        As a result, we get the Range, Doppler and Azimuth estimation of
-        targets detected by the radar.
-
-        NOTE: The Angle estimation based on FFT doesn't provide high accurary.
-        Thus, more advanced methods like MUSIC or ESPRIT should be implemented.
-        """
-        # Calibrate raw data
-        adc_samples = self._calibrate()
-
-        # Only consider azimuth on elevation 0
-        virtual_array, coupling_calib = self._pre_process(adc_samples)
-        virtual_array = np.sum(virtual_array, 0)
-        coupling_calib = np.sum(coupling_calib, 0)
-
-        # Na: Number of azimuth in the virtual array
-        # Nc: Number of chirp per antenna in the virtual array
-        # Ns: Number of samples per chirp
-        va_na, va_nc, va_ns = virtual_array.shape
-
-        _, Na, Nc, Ns = self._get_fft_size(None, va_na, va_nc, va_ns)
-
-        # Range-FFT
-        virtual_array *= np.blackman(va_ns).reshape(1, 1, -1)
-        rfft = np.fft.fft(virtual_array, Ns, -1)
-        rfft = rfft - coupling_calib
-
-        rfft *= np.blackman(va_nc).reshape(1, -1, 1)
-        # Doppler-FFT
-        dfft = np.fft.fft(rfft, Nc, 1)
-        dfft = np.fft.fftshift(dfft, 1)
-        # dfft = rdsp.velocity_compensation(dfft, ntx, nrx, nc)
-
-        dfft *= np.blackman(va_na).reshape(-1, 1, 1)
-        # Azimuth estimation
-        afft = np.fft.fft(dfft, Na, 0)
-        afft = np.fft.fftshift(afft, 0)
-
-        # Return the signal power
-        return np.abs(afft) ** 2
 
     def showHeatmapFromRaw(self, threshold: float,
             no_sidelobe: bool = False,
@@ -1001,18 +958,18 @@ class SCRadar(Lidar):
             info("No raw ADC samples available!")
             return None
 
-        signal_power = self._process_raw_adc_2d()
+        signal_power = self._process_raw_adc()
 
         # Size of elevation, azimuth, doppler, and range bins
-        Na, Nv, Nr = signal_power.shape
+        Ne, Na, Nv, Nr = signal_power.shape
         rbins, _, abins, _ = self._get_bins(Nr, None, Na, None)
 
         # Noise filtering mask
-        sp = np.sum(signal_power, 1)
+        sp = np.sum(signal_power, (0, 2))
         mask, _ = rdsp.nq_cfar_2d(sp, self.CFAR_WS, self.CFAR_GC)
 
         dpcl = np.log10(signal_power)
-        dpcl = np.sum(dpcl, 1)
+        dpcl = np.sum(dpcl, (0, 2))
         dpcl -= np.min(dpcl)
         dpcl /= np.max(dpcl)
         dpcl *= mask
