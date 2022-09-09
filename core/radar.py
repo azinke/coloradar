@@ -17,6 +17,7 @@ from core.config import NUMBER_RANGE_BINS_MIN
 from core.config import NUMBER_DOPPLER_BINS_MIN
 from core.config import NUMBER_AZIMUTH_BINS_MIN
 from core.config import NUMBER_ELEVATION_BINS_MIN
+from core.config import DOA_METHOD
 
 
 class SCRadar(Lidar):
@@ -645,81 +646,124 @@ class SCRadar(Lidar):
         # Calibrate raw data
         adc_samples = self._calibrate()
 
-        # virtual_array, coupling_calib = self._pre_process(adc_samples)
-
         # ntx: Number of TX antenna
         # nrx: Number of RX antenna
         # nc: Number of chirp per antenna in the virtual array
         # ns: Number of samples per chirp
         ntx, nrx, nc, ns = adc_samples.shape
-        # _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
+        _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
 
-        va, ccalib = self._pre_process(adc_samples)
-        Ne, Na, Nc, Ns = va.shape
+        rsignal = np.zeros((ntx, nrx, Nc, Ns), dtype=np.complex64)
+        vcomp = rdsp.velocity_compensation(ntx, Nc)
 
-        rsignal = np.zeros((Ne, Na, Nc, Ns), dtype=np.complex64)
-
-        for eidx in range(Ne):
-            for aidx in range(Na):
-                samples = va[eidx, aidx, :, :]
-                samples *= np.blackman(Ns).reshape(1, -1)
+        for tidx in range(ntx):
+            for ridx in range(nrx):
+                samples = adc_samples[tidx, ridx, :, :]
+                samples *= np.blackman(ns).reshape(1, -1)
                 rfft = np.fft.fft(samples, Ns, -1)
-                rfft = rfft - ccalib[eidx, aidx, :, :]
 
                 # Doppler-FFT
                 dfft = np.fft.fft(rfft, Nc, -2)
                 dfft = np.fft.fftshift(dfft, -2)
+                dfft *= vcomp[tidx].reshape(Nc, 1)
 
-                rsignal[eidx, aidx, :, :] = dfft
+                rsignal[tidx, ridx, :, :] = dfft
 
-        mimo_dfft = rsignal.reshape(Ne * Na, Nc, Ns)
+        mimo_dfft = rsignal.reshape(ntx * nrx, Nc, Ns)
         mimo_dfft = np.sum(np.abs(mimo_dfft) ** 2, 0)
 
         # OS-CFAR for object detection
         _, detections = rdsp.nq_cfar_2d(mimo_dfft, 8, 1)
 
+        va = rdsp.virtual_array(
+            rsignal,
+            self.calibration.antenna.txl,
+            self.calibration.antenna.rxl,
+        )
+        va_nel, va_naz, va_nc, va_ns = va.shape
+
+        Ne, Na, Nc, Ns = self._get_fft_size(*va.shape)
+
+        va = np.pad(
+            va,
+            (
+                (0, Ne - va_nel), (0, Na - va_naz),
+                (0, Nc - va_nc), (0, Ns - va_ns)
+            ),
+            "constant",
+            constant_values=((0, 0), (0, 0), (0, 0), (0, 0))
+        )
+
         # Range, doppler, azimuth and elevation bins
         rbins, vbins, abins, ebins = self._get_bins(Ns, Nc, Na, Ne)
 
-        pcl = np.zeros((len(detections), 5))
+        pcl = []
 
         for idx, obj in enumerate(detections):
             obj.range = rbins[obj.ridx]
             obj.velocity = vbins[obj.vidx]
 
-            # Azimuth estimation (With ESPRIT)
-            __az = rdsp.esprit(np.sum(rsignal[:, :, obj.vidx, obj.ridx], 0), Na, 1)
-            __az = np.arcsin(np.angle(__az) / np.pi)
-            obj.az = __az[0]
+            if DOA_METHOD == "esprit":
+                # Azimuth estimation (With ESPRIT)
+                __az = rdsp.esprit(np.sum(va[:, :, obj.vidx, obj.ridx], 0), Na, 1)
+                __az = np.arcsin(np.angle(__az) / np.pi)
 
-            # Azimuth bin
-            azidx = np.argmin(np.abs(np.abs(abins) - np.abs(obj.az)))
+                for _az in __az:
+                    obj.az = _az
 
-            """
-            NOTE: Eleviation estimation With FFT
+                    # Azimuth bin
+                    azidx = int((obj.az * Na/np.pi) + Na//2)
 
-            # Elevation estimation (with ESPRIT)
-            afft = np.fft.fft(rsignal[:, :, obj.vidx, obj.ridx], Na, 1)
-            afft = np.fft.fftshift(afft, 1)
-            efft = np.fft.fft(afft[:, azidx], Ne, 0)
-            efft = np.fft.fftshift(efft, 0)
-            _el = np.argmax(efft)
-            obj.el = ebins[_el]
-            """
+                    # Elevation estimation (with ESPRIT)
+                    __el = rdsp.esprit(va[:, azidx, obj.vidx, obj.ridx], Ne, 3)
+                    """
+                    NOTE:
+                    Since the vertical field of view is narrower and has a sparse
+                    minimum redundancy layout, the value "2.8" has been empirically
+                    espablished. And is equivalent to the 1/2 wavelength spacing bewteen
+                    the antenna elements in the elevation direction.
 
-            # Elevation estimation (with ESPRIT)
-            __el = rdsp.esprit(rsignal[:, azidx, obj.vidx, obj.ridx], Ne, 1)
-            __el = np.arcsin(np.angle(__el) / np.pi)
-            obj.el = __el[0]
+                    d = (2.8) x 1/2 lambda
 
-            pcl[idx] = np.array([
-                obj.az,                     # Azimnuth
-                obj.range,                  # Range
-                obj.el,                     # Elevation
-                obj.velocity,               # Velocity
-                10 * np.log10(obj.snr)      # SNR
-            ])
-        return pcl
+                    METHOD: To define the value, the height of a known object has been
+                    recorded and used to tune of the inter-element spacing of the antenna
+                    in the elevation direction.
+
+                    The value -pi/2 is substracted from the estimated angular frequency to
+                    count for negative elevations. It's equivalent to the FFT-shift when
+                    performing a FFT processing.
+                    """
+                    __el = np.arcsin((np.angle(__el) - np.pi/2) / (2.8 * np.pi))
+                    for _el in __el:
+                        obj.el = _el
+                        pcl.append(np.array([
+                            obj.az,                     # Azimnuth
+                            obj.range,                  # Range
+                            obj.el,                     # Elevation
+                            obj.velocity,               # Velocity
+                            10 * np.log10(obj.snr)      # SNR
+                        ]))
+
+            elif DOA_METHOD == "fft":
+                afft = np.fft.fft(va[:, :, obj.vidx, obj.ridx], Na, 1)
+                afft = np.fft.fftshift(afft, 1)
+                _az = np.argsort(np.sum(afft, 0))
+                _az = _az[:2]
+                for _t in _az:
+                    efft = np.fft.fft(afft[:, _t], Ne, 0)
+                    efft = np.fft.fftshift(efft, 0)
+                    _el = np.argmax(efft)
+                    obj.az = abins[_t]
+                    obj.el = ebins[_el]
+
+                    pcl.append(np.array([
+                        obj.az,                     # Azimnuth
+                        obj.range,                  # Range
+                        obj.el,                     # Elevation
+                        obj.velocity,               # Velocity
+                        10 * np.log10(obj.snr)      # SNR
+                    ]))
+        return np.array(pcl)
 
     def showPointcloudFromRaw(self,
             velocity_view: bool = False,

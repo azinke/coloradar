@@ -14,9 +14,9 @@ import numpy as np
 C: float = 299792458.0
 
 
-def steering_vector(txl: np.array, rxl: np.array,
-                            az: float, el: float,) -> np.array:
-    """Steering vector.
+def steering_matrix(txl: np.array, rxl: np.array,
+                            az: np.array, el: np.array,) -> np.array:
+    """Build a steering matrix.
 
     Arguments:
         txl: TX Antenna layout
@@ -24,19 +24,20 @@ def steering_vector(txl: np.array, rxl: np.array,
         az: Azimuth angle
         el: Elevation angle
     """
-    # Virtual antenna array steering vector
-    svect = np.zeros(len(txl) * len(rxl), dtype=np.complex128)
+    taz = txl[:, 1]
+    tel = txl[:, 2]
+    raz = rxl[:, 1]
+    rel = rxl[:, 2]
 
-    # *idx: index of the antenna element
-    # *az: azimuth of the antenna element
-    # *el: elevation of the antenna element
-    for tidx, taz, tel in txl:
-        for ridx, raz, rel in rxl:
-            svect[ridx + tidx * len(rxl)] = np.exp(
-                1j * np.pi * (
-                    (taz+raz)* np.cos(az) * np.sin(el) + (tel+rel) * np.cos(el)
-            ))
-    return svect
+    laz = np.kron(taz, np.ones(len(raz))).reshape(-1, len(raz)) + raz
+    laz = laz.reshape(-1, 1)
+    lel = np.kron(tel, np.ones(len(rel))).reshape(-1, len(rel)) + rel
+    lel = lel.reshape(-1, 1)
+    # Virtual antenna array steering matrix
+    smat = np.exp(
+        1j * np.pi * (laz * (np.cos(az) * np.sin(el)) + lel * np.cos(el))
+    )
+    return smat
 
 
 def music(signal: np.array, txl: np.array, rxl: np.array,
@@ -51,9 +52,14 @@ def music(signal: np.array, txl: np.array, rxl: np.array,
         rxl: RX Antenna layout
         az_bins: Azimuth bins
         el_bins: Elevation bins
+
+    NOTE: Under test
     """
     # Number of targets expected
-    T: int = 1
+    T: int = 10
+
+    # Number of antenna
+    S: int = 12
 
     N = len(signal)
     signal = np.asmatrix(signal)
@@ -68,14 +74,9 @@ def music(signal: np.array, txl: np.array, rxl: np.array,
     V = eigvect[:, :T]
     Noise = eigvect[:, T:]
 
-    amap = np.zeros((len(el_bins) * len(az_bins)), dtype=np.complex128)
-
-    for eidx, el in enumerate(el_bins):
-        for aidx, az in enumerate(az_bins):
-            e = np.asmatrix(steering_vector(txl, rxl, az, el)).T
-            amap[aidx + eidx * len(az_bins)] = 1 / np.sum(e.H * np.asmatrix(Noise))
-    amap = 20 * np.log10(np.abs(amap))
-    return amap
+    A = steering_matrix(txl, rxl, az_bins, el_bins)
+    A = np.asmatrix(A)
+    return (1.0 / np.abs(A.H * (Noise * Noise.H) * A))
 
 
 def esprit(signal: np.array, order: int, nb_sources: int) -> np.array:
@@ -422,23 +423,23 @@ def nq_cfar_2d(samples, ws: int, ngc: int,
     return mask, detections
 
 
-def velocity_compensation(dfft: np.array, ntx, nrx, nc) -> None:
-    """Handle the compensation of velocity induiced by the MIMO antenna.
+def velocity_compensation( ntx, nc) -> None:
+    """Generate the compensation matrix for velocity-induced phase-shift.
+
+    Meant to compensate the velocity-induced phase shift created by TDM MIMO
+    configuration.
 
     Arguments:
-        rfft: Range-FFT
-              Result obtained from the Range-FFT of the ADC samples
         ntx: Number of transmission antenna
-        nrx: Number of reception antenna
         nc: Number of chirps per frame
 
     Return:
-        Corrected Doppler-FFT array
+        Phase shift correction matrix
     """
-    # Number of chirp per frame in MIMO configuration
-    mimo_nc: int = ntx * nrx * nc
-    li = np.repeat(np.arange(ntx), nrx * nc) * np.arange(-mimo_nc/2, mimo_nc/2) / (mimo_nc * ntx)
-    velocity_compensation = np.exp(-2j * np.pi * li).reshape(mimo_nc, -1)
-    dfft = dfft.reshape(mimo_nc, -1) * velocity_compensation
-    dfft = dfft.reshape(ntx, nrx, nc, -1)
-    return dfft
+    tl = np.arange(0, ntx)
+    cl = np.arange(-nc//2, nc//2)
+    tcl = np.kron(tl, cl) / (ntx * nc)
+    # Velocity compensation
+    vcomp = np.exp(-2j * np.pi * tcl)
+    vcomp = vcomp.reshape(ntx, 1, nc, 1)
+    return vcomp
