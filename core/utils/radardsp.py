@@ -213,6 +213,17 @@ def get_max_range(fs: float, fslope: float) -> float:
     return fs * C / (2 * fslope)
 
 
+def get_max_velocity(ntx:int, fstart: float, tc: float) -> float:
+    """Compute the maximum range of the radar.
+
+    Arguments:
+        ntx: Number of TX antenna
+        fstart: Chirp start frequency
+        tc: Chirp time
+    """
+    return (C / fstart) / (4.0 * tc * ntx)
+
+
 def get_range_resolution(ns: int, fs: float, fslope,
                         is_adc_filtered: bool = True) -> float:
     """Compute the range resolution of a Radar sensor.
@@ -291,7 +302,7 @@ def get_velocity_bins(ntx: int, nv: int, fstart: float, tc: float) -> np.array:
     Return:
         Array of velocity bins
     """
-    vmax: float = (C / fstart) / (4.0 * tc * ntx)
+    vmax: float = get_max_velocity(ntx, fstart, tc)
     # Resolution used for rendering
     # Not the actual radar resolution
     vres = vmax / nv
