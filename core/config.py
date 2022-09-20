@@ -20,3 +20,12 @@ NUMBER_RANGE_BINS_MIN: int = 256
 # DoA estimation methods
 # values: "fft", "esprit"
 DOA_METHOD: str = "esprit"
+
+# Radar Digital Signal Processing Method
+# values: "normal", "fesprit"
+#   - "normal" stands for chain of Range-Doppler FFT, CFAR and DOA
+#   - "fesprit" also computes the Range-Doppler FFT but uses ESPRIT for
+#     a precise frequency estimation for Range, Doppler and DOA. No need
+#     for CFAR
+# NOTE: "fesprit" is still being tested and optimized
+RDSP_METHOD: str = "normal"
