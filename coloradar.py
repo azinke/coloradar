@@ -80,7 +80,7 @@ def main () -> None:
         "--threshold",
         help="Threshold for filtering heatmap pointcloud",
         type=float,
-        default=0.15,
+        default=0.25,
     )
     parser.add_argument(
         "--no-sidelobe",
