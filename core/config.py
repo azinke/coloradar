@@ -19,7 +19,7 @@ NUMBER_RANGE_BINS_MIN: int = 128
 
 # DoA estimation methods
 # values: "fft", "esprit"
-DOA_METHOD: str = "esprit"
+DOA_METHOD: str = "fft"
 
 # Radar Digital Signal Processing Method
 # values: "normal", "fesprit"
