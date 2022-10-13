@@ -828,8 +828,8 @@ class SCRadar(Lidar):
             elif DOA_METHOD == "fft":
                 afft = np.fft.fft(va[:, :, obj.vidx, obj.ridx], Na, 1)
                 afft = np.fft.fftshift(afft, 1)
-                _az = np.argsort(np.sum(afft, 0))
-                _az = _az[:2]
+                mask = rdsp.os_cfar(np.abs(np.sum(afft, 0)).reshape(-1), 16, 8, 4)
+                _az = np.argwhere(mask == 1).reshape(-1)
                 for _t in _az:
                     efft = np.fft.fft(afft[:, _t], Ne, 0)
                     efft = np.fft.fftshift(efft, 0)

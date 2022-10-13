@@ -20,13 +20,13 @@ With the current version of the `coloradar` package, the supported features as p
 
 PCL: Pointcloud
 
-For the radar sensors, the first two columns of the table above indiacte post-processed data made available
-in the coloradar dataset.
+For the radar sensors, the first two columns of the table above indiactes post-processed data made available
+in the `coloradar` dataset.
 
 
 ## Environment setup
 
-Create a python virtual environment and install the required packages as follow
+Create a python virtual environment and install the required packages as follows:
 
 ```bash
 python -m venv venv
@@ -39,12 +39,12 @@ python -m pip install -r requirements.txt
 
 The coloradar dataset can be downloaded from [coloradar dataset](https://arpg.github.io/coloradar/).
 
-As one can notice it's composed of many subset of the dataset that can be downloaded separately.
-But the folder structure of each subset is the same.
+The dataset is composed of many subsets that can be downloaded separately. But the folder structure of
+each subset is the same.
 
 ## Setup and configuration
 
-The stuture of this repository is as follow
+The structure of this repository is as follows:
 
 ```txt
 .
@@ -58,7 +58,7 @@ The stuture of this repository is as follow
 ```
 
 Before using this tool, the dataset must be downloaded and unzipped in the `dataset` folder as well as
-the calibration information (nameed `calib` on the coloradar dataset website) of the different sensors.
+the calibration information (named `calib` on the coloradar dataset website) of the different sensors.
 
 Then, the folder structure would look like this:
 
@@ -124,8 +124,8 @@ The only part that requires your attention is the `folders` key of the `datastor
     ]
 ```
  In the example shown above, each subset of the dataset to handle, is registered along with a short
- `codename` to access it. The subset already mentioned can be accessed with their corresponding
- codename. New subsets of the coloradar dataset can be added in a similar way. The codenames can
+ `codename` to access it. The subsets already registered can be accessed with their corresponding
+ codename. New subsets of the coloradar dataset can be added similarly. The codenames can
  even be updated to suit the naming convention that you would prefer.
 
 With that, you're all set to play around with the coloradar dataset.
@@ -133,10 +133,10 @@ With that, you're all set to play around with the coloradar dataset.
 ## Usage
 
 **IMPORTANT NOTE**:
-- _If you've setted up a virtual environment, don't forget to enable it first_
+- _If you've set up a virtual environment, don't forget to enable it first_
 - _Rendering are done based on a web based backend. So, a web browser tab will automatically be launched for all renderings._
 
-The easiest way to have an overview of all the available options to interact with the datatset
+The easiest way to have an overview of all the available options to interact with the dataset
 is the help command.
 
 
@@ -144,7 +144,7 @@ is the help command.
 python coloradar.py -h
 ```
 
-However, find below the cheatsheet of this CLI tool
+However, find below the cheat-sheet of this CLI tool
 
 
 1. Overview
@@ -159,7 +159,7 @@ Either one of this command pretty print the entire `dataset/dataset.json` file t
 overview of the current configuration in use.
 
 Since each subset of the dataset receives a codename to interact with it, you can request
-the list of currently registered subsets of the dataset and their codenames as follow:
+the list of currently registered subsets of the dataset and their codenames as follows:
 
 ```bash
 # Get the list of registered dataset and their codenames
@@ -210,7 +210,7 @@ python coloradar.py --dataset <codename> -i <frame-index> --scradar --heatmap
 
 
 #
-# Processing or raw ADC samples
+# Processing of raw ADC samples from single chip radar
 #
 
 # Render single chip radar  3D heatmap  from raw ADC
@@ -235,7 +235,7 @@ python coloradar.py --dataset <codename> -i <frame-index> --ccradar --heatmap
 
 
 #
-# Processing or raw ADC samples
+# Processing of raw ADC samples from cascaded radar sensor
 #
 
 # Render cascaded chip radar  3D heatmap  from raw ADC samples
@@ -255,16 +255,16 @@ See examples below:
 
 ```bash
 # Render single chip radar 3D pointcloud
-python coloradar.py --dataset hallway0 -i 130 --scradar
+python coloradar.py --dataset hallway0 -i 130 --scradar --raw
 
 # Render cascaded chip radar pointcloud bird eye view from raw ADC samples
-python coloradar.py --dataset hallway0 -i 175 --ccradar -pcl -bev
+python coloradar.py --dataset hallway0 -i 175 --ccradar --raw -pcl -bev
 ```
 
-4. Batched processing and save output
+4. Batched processing and save outputs
 
 You can note that the index option `-i` is no longer needed. The path given for
-the `save-to` option could be a non existing one. The path will automatically be
+the `save-to` option could be a non-existing one. The path will automatically be
 created in that case.
 
 ```bash
