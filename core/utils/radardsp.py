@@ -280,9 +280,9 @@ def get_velocity_bins(ntx: int, nv: int, fstart: float, tc: float) -> np.array:
     vmax: float = get_max_velocity(ntx, fstart, tc)
     # Resolution used for rendering
     # Not the actual radar resolution
-    vres = vmax / nv
+    vres = (2 * vmax) / nv
 
-    bins = np.arange(-vmax/2, vmax/2, vres)
+    bins = np.arange(-vmax, vmax, vres)
     return bins
 
 

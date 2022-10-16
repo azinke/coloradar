@@ -20,6 +20,15 @@ from core.config import NUMBER_ELEVATION_BINS_MIN
 from core.config import DOA_METHOD
 from core.config import RDSP_METHOD
 
+from core.config import RD_OS_CFAR_WS
+from core.config import RD_OS_CFAR_GS
+from core.config import RD_OS_CFAR_K
+from core.config import RD_OS_CFAR_TOS
+
+from core.config import AZ_OS_CFAR_WS
+from core.config import AZ_OS_CFAR_GS
+from core.config import AZ_OS_CFAR_TOS
+
 
 class SCRadar(Lidar):
     """Radar.
@@ -754,7 +763,13 @@ class SCRadar(Lidar):
         mimo_dfft = np.sum(np.abs(mimo_dfft) ** 2, 0)
 
         # OS-CFAR for object detection
-        _, detections = rdsp.nq_cfar_2d(mimo_dfft, 8, 1)
+        _, detections = rdsp.nq_cfar_2d(
+            mimo_dfft,
+            RD_OS_CFAR_WS,
+            RD_OS_CFAR_GS,
+            RD_OS_CFAR_K,
+            RD_OS_CFAR_TOS,
+        )
 
         va = rdsp.virtual_array(
             dfft,
@@ -828,7 +843,12 @@ class SCRadar(Lidar):
             elif DOA_METHOD == "fft":
                 afft = np.fft.fft(va[:, :, obj.vidx, obj.ridx], Na, 1)
                 afft = np.fft.fftshift(afft, 1)
-                mask = rdsp.os_cfar(np.abs(np.sum(afft, 0)).reshape(-1), 16, 8, 4)
+                mask = rdsp.os_cfar(
+                    np.abs(np.sum(afft, 0)).reshape(-1),
+                    AZ_OS_CFAR_WS,
+                    AZ_OS_CFAR_GS,
+                    AZ_OS_CFAR_TOS,
+                )
                 _az = np.argwhere(mask == 1).reshape(-1)
                 for _t in _az:
                     efft = np.fft.fft(afft[:, _t], Ne, 0)
