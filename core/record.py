@@ -8,8 +8,8 @@ import sys
 import os
 import multiprocessing
 
+import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.animation as anim
 import cv2 as cv
 
 from core.config import ROOTDIR, DATASET
@@ -87,6 +87,7 @@ class Record:
                                  as fourth dimention
                 "heatmap_3d": Save 3D heatmap when true. Otherwise, a
                               2D heatmap is generated
+                "save_as": Save arrays as `.csv` or `.bin` files
         """
         # Dot per inch
         self._dpi: int = 400
@@ -154,6 +155,27 @@ class Record:
                 show=False,
             )
         elif self._kwargs.get("pointcloud"):
+            if self._kwargs.get("save_as") == "csv":
+                pcl = self.ccradar.getPointcloudFromRaw(
+                    polar=self._kwargs.get("polar")
+                )
+                np.savetxt(
+                    f"{self._output_dir}/radar_pcl{idx}.csv",
+                    pcl.astype(np.float32),
+                    delimiter=",",
+                    header="Azimuth (m), "
+                           "Range (m), "
+                           "Elevation (m), "
+                           "Velocity (m/s), "
+                           "Intensity or SNR (dB)"
+                )
+                return idx
+            elif self._kwargs.get("save_as") == "bin":
+                pcl = self.ccradar.getPointcloudFromRaw(
+                    polar=self._kwargs.get("polar"))
+                pcl.astype(np.float32).tofile(
+                    f"{self._output_dir}/radar_pcl{idx}.bin")
+                return idx
             self.ccradar.showPointcloudFromRaw(
                 self._kwargs.get("velocity_view"),
                 self._kwargs.get("bird_eye_view"),

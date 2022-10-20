@@ -177,6 +177,12 @@ def main () -> None:
         default=False
     )
     parser.add_argument(
+        "-s", "--save-as",
+        help="Save post-processed ADC samples in files. Values: 'bin', 'csv'",
+        type=str,
+        default="bin",
+    )
+    parser.add_argument(
         "--save-to",
         help="Destination folder to save the processed data to.",
         type=str,
@@ -224,7 +230,19 @@ def main () -> None:
             sys.exit(0)
         elif args.scradar:
             record.load("scradar")
-            if args.heatmap:
+            if args.bird_eye_view:
+                info("Rendering single chip radar pointcloud bird eye view ...")
+                bev = record.scradar.getBirdEyeView(
+                    args.resolution,
+                    (-args.width/2, args.width/2),
+                    (-args.height/2, args.height/2),
+                )
+                success("Bird Eye View successfully rendred!")
+                plt.imshow(bev)
+                plt.show()
+                info("Bird Eye View closed!")
+                sys.exit(0)
+            elif args.heatmap:
                 info("Rendering single chip radar heatmap ...")
                 record.scradar.showHeatmap(args.threshold, args.no_sidelobe)
                 success("Heatmap closed!")
@@ -261,7 +279,19 @@ def main () -> None:
             sys.exit(0)
         elif args.ccradar:
             record.load("ccradar")
-            if args.heatmap:
+            if args.bird_eye_view:
+                info("Rendering cascaded chip radar pointcloud bird eye view ...")
+                bev = record.ccradar.getBirdEyeView(
+                    args.resolution,
+                    (-args.width/2, args.width/2),
+                    (-args.height/2, args.height/2),
+                )
+                success("Bird Eye View successfully rendred!")
+                plt.imshow(bev)
+                plt.show()
+                info("Bird Eye View closed!")
+                sys.exit(0)
+            elif args.heatmap:
                 info("Rendering cascade chip radar heatmap ...")
                 record.ccradar.showHeatmap(args.threshold, args.no_sidelobe)
                 success("Heatmap closed!")
@@ -292,7 +322,10 @@ def main () -> None:
                 )
                 success("Successfully closed!")
                 sys.exit(0)
-
+            info("Rendering cascaded chip radar pointcloud ...")
+            record.ccradar.show()
+            success("Successfully closed!")
+            sys.exit(0)
     elif args.dataset and args.save_to:
         record = coloradar.getRecord(args.dataset, 0)
         if args.lidar:
@@ -324,6 +357,7 @@ def main () -> None:
                     bird_eye_view=args.bird_eye_view,
                     polar=args.polar,
                     pointcloud=True,
+                    save_as=args.save_as,
                 )
                 success("Radar pointcloud generated with success!")
                 sys.exit(0)

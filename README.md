@@ -205,6 +205,9 @@ Therefore, we have the following commands
 # Render single chip radar 3D pointcloud
 python coloradar.py --dataset <codename> -i <frame-index> --scradar
 
+# Render single chip radar birds' eye view from 3D pointcloud
+python coloradar.py --dataset <codename> -i <frame-index> --scradar -bev
+
 # Render single chip radar  3D heatmap
 python coloradar.py --dataset <codename> -i <frame-index> --scradar --heatmap
 
@@ -229,6 +232,9 @@ python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw --pcl 
 ```bash
 # Render cascaded chip radar 3D pointcloud
 python coloradar.py --dataset <codename> -i <frame-index> --ccradar
+
+# Render cascaded chip radar birds' eye view from 3D pointcloud
+python coloradar.py --dataset <codename> -i <frame-index> --ccradar -bev
 
 # Render cascaded chip radar  3D heatmap
 python coloradar.py --dataset <codename> -i <frame-index> --ccradar --heatmap
@@ -278,7 +284,35 @@ python coloradar.py --dataset <codename> --scradar --raw -pcl -bev --save-to <ou
 python coloradar.py --dataset <codename> --ccradar --raw -pcl -bev --save-to <output-directory>
 ```
 
-5. Animation
+5. Save post-processed files as `.csv` or `.bin` files
+
+The placeholder `<ext>` could be either `csv` or `bin`. Binary files are saved as float32 values.
+
+- `csv`: Comma Separated Value
+- `bin`: Binary
+
+```bash
+# Save all cascaded chip radar plointcloud of a given subset of the dataset as "csv" or "bin" files
+python coloradar.py --dataset <codename> --ccradar --raw -pcl --save-as <ext> --save-to <output-directory>
+
+# Example for saving post-processed pointcloud as bin files
+python coloradar.py --dataset outdoor0 --ccradar --raw -pcl --save-as bin --save-to output
+```
+
+The binary files generated can be read as follows:
+
+```python
+import numpy as np
+
+# [0]: Azimuth
+# [1]: Range
+# [2]: Elevation
+# [3]: Velocity
+# [4]: Intensity of reflection in dB or SNR
+data = np.fromfile(fileptah, dtype=np.float32, count=-1).reshape(-1, 5)
+```
+
+6. Animation
 
 ```bash
 # Create a video out of the images present in the input folder provided
