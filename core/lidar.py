@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .utils.common import error
+from .utils.common import error, warning
 
 
 class Lidar(object):
@@ -49,6 +49,9 @@ class Lidar(object):
 
     def show(self, render: bool = True) -> None:
         """Render the lidar pointcloud."""
+        if self.cld is None:
+            warning("No pointcloud found!")
+            return None
         ax = plt.axes(projection="3d")
         ax.set_title("Lidar pointcloud")
         ax.set_xlabel("x")

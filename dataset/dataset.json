@@ -75,7 +75,8 @@
         },
         "pointcloud": {
           "timestamp": "",
-          "data": ""
+          "data": "cascade/pointclouds",
+          "filename_prefix": "radar_pcl"
         }
       },
       "scradar": {

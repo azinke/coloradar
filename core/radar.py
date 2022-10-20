@@ -66,12 +66,11 @@ class SCRadar(Lidar):
         self.config = config
         self.index = index
 
-        if self.sensor == "scradar":
-            # Read pointcloud
-            self.cld = self._load(
-                index, "pointcloud", np.float32,
-                (-1, self.NUMBER_RECORDING_ATTRIBUTES)
-            )
+        # Read pointcloud
+        self.cld = self._load(
+            index, "pointcloud", np.float32,
+            (-1, self.NUMBER_RECORDING_ATTRIBUTES)
+        )
 
         # Read heatmap
         self.heatmap = self._load(
@@ -131,7 +130,7 @@ class SCRadar(Lidar):
             data = np.fromfile(filepath, dtype)
             data = np.reshape(data, shape)
         except FileNotFoundError:
-            error(f"File '{filepath}' not found.")
+            # error(f"File '{filepath}' not found.")
             data = None
         return data
 
@@ -866,13 +865,16 @@ class SCRadar(Lidar):
                     ]))
         return np.array(pcl)
 
-    def showPointcloudFromRaw(self,
-            velocity_view: bool = False,
-            bird_eye_view: bool = False, polar: bool = False, **kwargs) -> None:
-        """Render pointcloud of detected object from radar signal processing.
+    def getPointcloudFromRaw(self, polar: bool = False) -> np.array:
+        """Point post-processed radar pointcloud.
 
-        Arguments:
-            bird_eye_view: Enable 2D Bird Eye View rendering
+        Return:
+            Pointcloud in the following format:
+                [0]: Azimuth
+                [1]: Range
+                [2]: Elevation
+                [3]: Velocity
+                [4]: Intensity of reflection in dB or SNR
         """
         # ADC sampling frequency
         fs: float = self.calibration.waveform.adc_sample_frequency
@@ -893,9 +895,31 @@ class SCRadar(Lidar):
         # Exclude all points detected in the last range bins because
         # those detections are not reliable
         pcl = pcl[pcl[:, 1] < (0.95 * rmax)]
-
+        pcl = pcl[pcl[:, 4] > np.max(pcl[:, 4]) * 0.4]
         if not polar:
             pcl = self._to_cartesian(pcl)
+        return pcl
+
+    def showPointcloudFromRaw(self,
+            velocity_view: bool = False,
+            bird_eye_view: bool = False, polar: bool = False, **kwargs) -> None:
+        """Render pointcloud of detected object from radar signal processing.
+
+        Arguments:
+            bird_eye_view: Enable 2D Bird Eye View rendering
+        """
+        # ADC sampling frequency
+        fs: float = self.calibration.waveform.adc_sample_frequency
+
+        # Frequency slope
+        fslope: float = self.calibration.waveform.frequency_slope
+
+        # Maximum range
+        rmax: float = rdsp.get_max_range(fs, fslope)
+
+        # Get pointclouds
+        pcl = self.getPointcloudFromRaw(polar)
+
         if bird_eye_view:
             ax = plt.axes()
             ax.set_title(f"Radar BEV | Frame {self.index:04}")
