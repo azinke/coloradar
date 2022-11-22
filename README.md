@@ -206,7 +206,8 @@ Therefore, we have the following commands
 python coloradar.py --dataset <codename> -i <frame-index> --scradar
 
 # Render single chip radar birds' eye view from 3D pointcloud
-python coloradar.py --dataset <codename> -i <frame-index> --scradar -bev
+# Resolution in meter/pixel  | Eg.: 0.1 -> 10cm / pixel
+python coloradar.py --dataset <codename> -i <frame-index> --scradar -bev --resolution <resolution>
 
 # Render single chip radar  3D heatmap
 python coloradar.py --dataset <codename> -i <frame-index> --scradar --heatmap
@@ -234,7 +235,8 @@ python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw --pcl 
 python coloradar.py --dataset <codename> -i <frame-index> --ccradar
 
 # Render cascaded chip radar birds' eye view from 3D pointcloud
-python coloradar.py --dataset <codename> -i <frame-index> --ccradar -bev
+# Resolution in meter/pixel  | Eg.: 0.1 -> 10cm / pixel
+python coloradar.py --dataset <codename> -i <frame-index> --ccradar -bev --resolution <resolution>
 
 # Render cascaded chip radar  3D heatmap
 python coloradar.py --dataset <codename> -i <frame-index> --ccradar --heatmap
