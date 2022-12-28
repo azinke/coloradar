@@ -180,7 +180,7 @@ def main () -> None:
         "-s", "--save-as",
         help="Save post-processed ADC samples in files. Values: 'bin', 'csv'",
         type=str,
-        default="bin",
+        default="",
     )
     parser.add_argument(
         "--save-to",
