@@ -142,12 +142,15 @@ class Record:
         """
         self.index = idx
         self.load(self._sensor)
+        radar: SCRadar | CCRadar = self.scradar
+        if self.ccradar:
+            radar = self.ccradar
         SIZE: int = 20   # inch
         plt.figure(1, clear=True, dpi=self._dpi, figsize=(SIZE, SIZE))
         if self._kwargs.get("heatmap_3d") == False:
-            self.ccradar.show2dHeatmap(False, False)
+            radar.show2dHeatmap(False, False)
         elif self._kwargs.get("heatmap_3d"):
-            self.ccradar.showHeatmapFromRaw(
+            radar.showHeatmapFromRaw(
                 self._kwargs.get("threshold"),
                 self._kwargs.get("no_sidelobe"),
                 self._kwargs.get("velocity_view"),
@@ -156,7 +159,7 @@ class Record:
             )
         elif self._kwargs.get("pointcloud"):
             if self._kwargs.get("save_as") == "csv":
-                pcl = self.ccradar.getPointcloudFromRaw(
+                pcl = radar.getPointcloudFromRaw(
                     polar=self._kwargs.get("polar")
                 )
                 np.savetxt(
@@ -171,12 +174,12 @@ class Record:
                 )
                 return idx
             elif self._kwargs.get("save_as") == "bin":
-                pcl = self.ccradar.getPointcloudFromRaw(
+                pcl = radar.getPointcloudFromRaw(
                     polar=self._kwargs.get("polar"))
                 pcl.astype(np.float32).tofile(
                     f"{self._output_dir}/radar_pcl{idx}.bin")
                 return idx
-            self.ccradar.showPointcloudFromRaw(
+            radar.showPointcloudFromRaw(
                 self._kwargs.get("velocity_view"),
                 self._kwargs.get("bird_eye_view"),
                 self._kwargs.get("polar"),

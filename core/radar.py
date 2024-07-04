@@ -25,10 +25,6 @@ from core.config import RD_OS_CFAR_GS
 from core.config import RD_OS_CFAR_K
 from core.config import RD_OS_CFAR_TOS
 
-from core.config import AZ_OS_CFAR_WS
-from core.config import AZ_OS_CFAR_GS
-from core.config import AZ_OS_CFAR_TOS
-
 
 class SCRadar(Lidar):
     """Radar.
@@ -36,18 +32,19 @@ class SCRadar(Lidar):
     Attrinutes:
         NUMBER_RECORDING_ATTRIBUTES: Number of 32-bit integer packed
             to form a single measurement recording
-        CFAR_WS: Constant False Alarm Rate Window Size
-        CFAR_GC: Constant False Alarm Rate Guard Cell
+        AZ_OS_CFAR_WS: Constant False Alarm Rate Window Size
+        AZ_OS_CFAR_GS: Constant False Alarm Rate Guard Cell
+        AZ_OS_CFAR_TOS: Constant False Alarm Tos factor
     """
 
     # The recorded attributes are:
     # x, y, z, I (Intensity of the reflections), Vr (Radial velocity)
     NUMBER_RECORDING_ATTRIBUTES: int = 5
 
-    # CFAR Window size
-    CFAR_WS: int = 16
-    # CFAR guard cell
-    CFAR_GC: int = 8
+    # 1D OS-CFAR Parameters used for peak selection in Azimuth-FFT
+    AZ_OS_CFAR_WS: int = 8          # Window size
+    AZ_OS_CFAR_GS: int = 4          # Guard cell
+    AZ_OS_CFAR_TOS: int = 8         # Tos factor
 
     AZIMUTH_FOV: float = np.deg2rad(180)
     ELEVATION_FOV: float = np.deg2rad(20)
@@ -589,6 +586,37 @@ class SCRadar(Lidar):
         )
         return virtual_array
 
+    def _td_processing(self):
+        """Time Domain Processing."""
+        # Calibrated ADC samples
+        adc_samples = self._calibrate()
+        ntx, nrx, nc, ns = adc_samples.shape
+
+        # Range, Doppler, Azimuth and Elevation bins
+        rbins, vbins, abins, ebins = self._get_bins(ns, nc, nrx, ntx)
+
+        fslope = self.calibration.waveform.frequency_slope
+        fstart: float = self.calibration.waveform.start_frequency
+        fsample = self.calibration.waveform.adc_sample_frequency
+
+        # Ramp end time
+        te: float = self.calibration.waveform.ramp_end_time
+
+        # Chirp time
+        tc: float = self.calibration.waveform.idle_time + te
+
+        # Maximum range
+        rmax: int = rdsp.get_max_range(fsample, fslope)
+
+        srange = np.sum(adc_samples, (0, 1, 2))
+        amps = np.abs(srange)
+        angles = np.angle(srange)
+        freq =  np.pi * np.sin(angles) #  / (2 *)
+        rg = freq * rdsp.C / (2 * fslope)
+        plt.scatter(rg, amps)
+        plt.show()
+        exit(0)
+
     def _fesprit(self):
         """FESPRIT.
 
@@ -844,9 +872,9 @@ class SCRadar(Lidar):
                 afft = np.fft.fftshift(afft, 1)
                 mask = rdsp.os_cfar(
                     np.abs(np.sum(afft, 0)).reshape(-1),
-                    AZ_OS_CFAR_WS,
-                    AZ_OS_CFAR_GS,
-                    AZ_OS_CFAR_TOS,
+                    self.AZ_OS_CFAR_WS,
+                    self.AZ_OS_CFAR_GS,
+                    self.AZ_OS_CFAR_TOS,
                 )
                 _az = np.argwhere(mask == 1).reshape(-1)
                 for _t in _az:
@@ -887,6 +915,8 @@ class SCRadar(Lidar):
 
         if RDSP_METHOD == "fesprit":
             pcl = self._fesprit()
+        elif RDSP_METHOD == "tdp":
+            pcl = self._td_processing()
         else:
             pcl = self._generate_radar_pcl()
         # Remove very close range
@@ -1166,12 +1196,15 @@ class CCRadar(SCRadar):
     """Cascade Chip Radar.
 
     Attributes:
-        CFAR_WS: Constant False Alarm Rate Window Size
-        CFAR_GC: Constant False Alarm Rate Guard Cell
+        AZ_OS_CFAR_WS: Constant False Alarm Rate Window Size
+        AZ_OS_CFAR_GS: Constant False Alarm Rate Guard Cell
+        AZ_OS_CFAR_TOS: Constant False Alarm Rate Tos factor
     """
+    # 1D OS-CFAR Parameters used for peak selection in Azimuth-FFT
+    AZ_OS_CFAR_WS: int = 16         # Window size
+    AZ_OS_CFAR_GS: int = 8          # Guard cell
+    AZ_OS_CFAR_TOS: int = 4         # Tos factor
 
-    CFAR_WS: int = 32
-    CFAR_GC: int = 16
     AZIMUTH_FOV: float = np.deg2rad(180)
     ELEVATION_FOV: float = np.deg2rad(20)
 
