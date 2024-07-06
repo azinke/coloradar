@@ -21,15 +21,17 @@ NUMBER_RANGE_BINS_MIN: int = 128
 
 # DoA estimation methods
 # values: "fft", "esprit"
-DOA_METHOD: str = "fft"
+DOA_METHOD: str = "esprit"
 
 # Radar Digital Signal Processing Method
-# values: "normal", "fesprit"
+# values: "normal", "fesprit", "tdp"
 #   - "normal" stands for chain of Range-Doppler FFT, CFAR and DOA
 #   - "fesprit" also computes the Range-Doppler FFT but uses ESPRIT for
 #     a precise frequency estimation for Range, Doppler and DOA. No need
 #     for CFAR
+#   - "tdp" stands for time domain processing
 # NOTE: "fesprit" is still being tested and optimized
+#
 RDSP_METHOD: str = "normal"
 
 
@@ -39,8 +41,3 @@ RD_OS_CFAR_WS: int = 8         # Window size
 RD_OS_CFAR_GS: int = 1         # Guard cell
 RD_OS_CFAR_K: float = 0.75     # n'th quantile
 RD_OS_CFAR_TOS: int = 8        # Tos factor
-
-# 1D OS-CFAR Parameters used for peak selection in Azimuth-FFT
-AZ_OS_CFAR_WS: int = 16         # Window size
-AZ_OS_CFAR_GS: int = 8          # Guard cell
-AZ_OS_CFAR_TOS: int = 6         # Tos factor

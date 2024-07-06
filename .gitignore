@@ -2,7 +2,7 @@
 *cache*
 
 # Virtual environment
-venv
+?venv*
 
 # Dataset folder expect the dataset entry point
 dataset/*

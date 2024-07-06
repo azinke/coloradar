@@ -1,11 +1,11 @@
 # Coloradar
 
-The `coloradar` package makes it easy to access and render entries of the coloradar dataset.
-From the dataset only the lidar, single chip radar, and cascade radar are covered for now in the
+The `coloradar` package makes it easy to access and render entries of the Coloradar dataset.
+From the dataset, only the Lidar, single-chip radar, and cascade radar are covered for now in the
 current version of the package.
 
-One of the interesting aspects of the coloradar dataset is the availability of raw ADC samples of
-the radar sensors. Thus, it's possible to apply the desired radar signal processing technics.
+One of the interesting aspects of the Coloradar dataset is the availability of raw ADC samples of
+the radar sensors. Thus, it's possible to apply the desired radar signal processing techniques.
 
 With the current version of the `coloradar` package, the supported features as presented in the table below
 
@@ -16,17 +16,19 @@ With the current version of the `coloradar` package, the supported features as p
 | Single chip radar     |   x    |     x      |       x       |           x            |          x         |
 | Cascaded radar        |   -    |     x      |       x       |           x            |          x         |
 
-[x] : Implemented      [-]: N/A or Not implemented
+[x] : Implemented
+
+[-]: N/A or Not Implemented
 
 PCL: Pointcloud
 
-For the radar sensors, the first two columns of the table above indiactes post-processed data made available
+For the radar sensors, the first two columns of the table above indicate post-processed data made available
 in the `coloradar` dataset.
 
 
 ## Environment setup
 
-Create a python virtual environment and install the required packages as follows:
+Create a Python virtual environment and install the required packages as follows:
 
 ```bash
 python -m venv venv
@@ -81,7 +83,7 @@ Then, the folder structure would look like this:
 └── requirements.txt
 ```
 
-In the snippet above, one can notice that multiple subset of the dataset have been downloaded. The key
+In the snippet above, one can notice that multiple subsets of the dataset have been downloaded. The key
 point to configure the supported subset of the dataset and how to access them is the
 `dataset/dataset.json` file.
 
@@ -125,16 +127,16 @@ The only part that requires your attention is the `folders` key of the `datastor
 ```
  In the example shown above, each subset of the dataset to handle, is registered along with a short
  `codename` to access it. The subsets already registered can be accessed with their corresponding
- codename. New subsets of the coloradar dataset can be added similarly. The codenames can
+ codename. New subsets of the Coloradar dataset can be added similarly. The codenames can
  even be updated to suit the naming convention that you would prefer.
 
-With that, you're all set to play around with the coloradar dataset.
+With that, you're all set to play around with the Coloradar dataset.
 
 ## Usage
 
 **IMPORTANT NOTE**:
 - _If you've set up a virtual environment, don't forget to enable it first_
-- _Rendering are done based on a web based backend. So, a web browser tab will automatically be launched for all renderings._
+- _Renderings are done based on a web-based backend. So, a web browser tab will automatically be launched for all renderings._
 
 The easiest way to have an overview of all the available options to interact with the dataset
 is the help command.
@@ -144,7 +146,7 @@ is the help command.
 python coloradar.py -h
 ```
 
-However, find below the cheat-sheet of this CLI tool
+However, find below the cheat sheet of this CLI tool
 
 
 1. Overview
@@ -155,7 +157,7 @@ python coloradar.py -o
 python coloradar.py --overview
 ```
 
-Either one of this command pretty print the entire `dataset/dataset.json` file to allow a quick
+Either one of these commands pretty-prints the entire `dataset/dataset.json` file to allow a quick
 overview of the current configuration in use.
 
 Since each subset of the dataset receives a codename to interact with it, you can request
@@ -191,11 +193,11 @@ python coloradar.py --dataset hallway0 -i 175 --lidar -bev
 
 3. Radar sensor
 
-The CLI options to access the data from either the single chip radar sensor or cascaded
+The CLI options to access the data from either the single-chip radar sensor or cascaded
 radar are quite similar.
 
 The shorthand used is:
-- `scradar`: single chip radar
+- `scradar`: single-chip radar
 - `ccradar`: cascaded chip radar
 
 Therefore, we have the following commands
@@ -224,10 +226,10 @@ python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw [--no-
 python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw --heatmap-2d
 
 # Render single chip radar  3D pointcloud  from raw ADC samples
-python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw --pcl
+python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw -pcl
 
 # Render single chip radar pointcloud bird eye view  from raw ADC samples
-python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw --pcl -bev
+python coloradar.py --dataset <codename> -i <frame-index> --scradar --raw -pcl -bev
 ```
 
 ```bash
@@ -253,10 +255,10 @@ python coloradar.py --dataset <codename> -i <frame-index> --ccradar --raw [--no-
 python coloradar.py --dataset <codename> -i <frame-index> --ccradar --raw --heatmap-2d
 
 # Render cascaded chip radar  3D pointcloud  from raw ADC samples
-python coloradar.py --dataset <codename> -i <frame-index> --ccradar --raw --pcl
+python coloradar.py --dataset <codename> -i <frame-index> --ccradar --raw -pcl
 
 # Render cascaded chip radar pointcloud bird eye view  from raw ADC samples
-python coloradar.py --dataset <codename> -i <frame-index> --ccradar --raw --pcl -bev
+python coloradar.py --dataset <codename> -i <frame-index> --ccradar --raw -pcl -bev
 ```
 
 See examples below:
